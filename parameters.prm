@@ -1,0 +1,10 @@
+# Listing of Parameters
+# ---------------------
+
+subsection Time
+  # End time
+  set End time       = 1
+
+  # Time step size
+  set Time step size = 0.5
+end
