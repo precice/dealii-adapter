@@ -1,10 +1,26 @@
 # Listing of Parameters
-# ---------------------
+# Dimensional quantities are in SI units
+# --------------------------------------
 
 subsection Time
-  # End time
-  set End time       = 1
+    # End time
+    set End time        = 1
 
-  # Time step size
-  set Time step size = 0.5
+    # Time step size
+    set Time step size  = 0.1
+
+    # Time integration scheme 
+    # 0 = forward, 1 = backward
+    set theta           = 0.5
+end
+
+subsection Material properties
+    # set mu (shear modulus)
+    set mu              = 0.5e6
+
+    # set lambda
+    set lambda          = 2e6
+
+    # set density
+    set density         = 1000
 end
