@@ -75,7 +75,7 @@ void Time::declare_parameters(ParameterHandler &prm)
 
         prm.declare_entry("theta", "0.5",
                           Patterns::Double(0,1),
-                          "theta");
+                          "Time integration scheme");
 
     }
     prm.leave_subsection();
@@ -135,10 +135,49 @@ void Materials::parse_parameters(ParameterHandler &prm)
     prm.leave_subsection();
 }
 
+struct FESystem
+{
+    unsigned int poly_degree;
+    unsigned int quad_order;
+
+    static void
+    declare_parameters(ParameterHandler &prm);
+
+    void
+    parse_parameters(ParameterHandler &prm);
+};
+
+
+void FESystem::declare_parameters(ParameterHandler &prm)
+{
+    prm.enter_subsection("Finite element system");
+    {
+        prm.declare_entry("Polynomial degree", "2",
+                          Patterns::Integer(0),
+                          "Polynomial degree of the FE system");
+
+        prm.declare_entry("Quadrature order", "3",
+                          Patterns::Integer(0),
+                          "Gauss quadrature order");
+    }
+    prm.leave_subsection();
+}
+
+void FESystem::parse_parameters(ParameterHandler &prm)
+{
+    prm.enter_subsection("Finite element system");
+    {
+        poly_degree = prm.get_integer("Polynomial degree");
+        quad_order = prm.get_integer("Quadrature order");
+    }
+    prm.leave_subsection();
+}
+
 
 struct AllParameters :
         public Time,
-        public Materials
+        public Materials,
+        public FESystem
 {
     AllParameters(const std::string &input_file);
 
@@ -161,12 +200,14 @@ void AllParameters::declare_parameters(ParameterHandler &prm)
 {
     Time::declare_parameters(prm);
     Materials::declare_parameters(prm);
+    FESystem::declare_parameters(prm);
 }
 
 void AllParameters::parse_parameters(ParameterHandler &prm)
 {
     Time::parse_parameters(prm);
     Materials::parse_parameters(prm);
+    FESystem::parse_parameters(prm);
 }
 
 
@@ -183,7 +224,19 @@ public:
           time_current(0.0),
           time_end(time_end),
           delta_t(delta_t)
-    {}
+    {
+        n_timesteps=time_end/delta_t;
+
+        if((time_end/delta_t)-n_timesteps>1e-12)
+        {
+            n_timesteps++;
+            std::cerr<< "  Warning: Timestep size is not a multiple of the end time.\n"
+                     << "           Simulation will be terminated at t = "
+                     <<n_timesteps*delta_t
+                    << "\n"
+                    <<std::endl;
+        }
+    }
 
     virtual ~Time()
     {}
@@ -204,6 +257,12 @@ public:
     {
         return timestep;
     }
+
+    unsigned int get_n_timesteps() const
+    {
+        return n_timesteps;
+    }
+
     void increment()
     {
         time_current += delta_t;
@@ -215,6 +274,7 @@ private:
     double       time_current;
     const double time_end;
     const double delta_t;
+    unsigned int n_timesteps;
 };
 
 
@@ -256,6 +316,7 @@ private:
     Vector<double> velocity;
     Vector<double> old_displacement;
     Vector<double> displacement;
+    Vector<double> old_forces;
     Vector<double> system_rhs;
 };
 
@@ -285,7 +346,7 @@ void right_hand_side(const typename DoFHandler<dim>::active_cell_iterator &cell,
              ++face)
             if (cell->face(face)->at_boundary() == true
                     && cell->face(face)->boundary_id() == 3)
-            {  values[point_n][1] = 2*1000*-2;//16 cells 1000 density 2 gravity
+            {  values[point_n][1] = 2*1000*-2;//2 cells (refinement) 1000 density 2 gravity
                 break;
             }
             else
@@ -301,7 +362,7 @@ ElasticProblem<dim>::ElasticProblem(const std::string &input_file)
     : parameters(input_file)
     , time(parameters.end_time, parameters.delta_t)
     , dof_handler(triangulation)
-    , fe(FE_Q<dim>(1), dim)
+    , fe(FE_Q<dim>(parameters.poly_degree), dim)
 {}
 
 //Destructor
@@ -315,8 +376,9 @@ ElasticProblem<dim>::~ElasticProblem()
 template <int dim>
 void ElasticProblem<dim>::make_grid()
 {
-    std::vector< std::vector< double > > stepsize( dim );
+    std::cout<<"  Create mesh: "<<std::endl;
 
+    std::vector< std::vector< double > > stepsize( dim );
     std::vector<double> x_direction  (5);//number of cells in this direction
     std::vector<double> y_direction  (1);//number of cells in this direction
 
@@ -340,11 +402,16 @@ void ElasticProblem<dim>::make_grid()
     //TODO: Add refinement to parameter class
     triangulation.refine_global(1);
 
+    std::cout << "\t Number of active cells:       "
+              << triangulation.n_active_cells() << std::endl;
+
 }
 
 template <int dim>
 void ElasticProblem<dim>::setup_system()
 {
+    std::cout<<"  Setup system: "<<std::endl;
+
     dof_handler.distribute_dofs(fe);
     hanging_node_constraints.clear();
     DoFTools::make_hanging_node_constraints(dof_handler,
@@ -358,6 +425,8 @@ void ElasticProblem<dim>::setup_system()
                                     /*keep_constrained_dofs = */ true);
     sparsity_pattern.copy_from(dsp);
 
+    std::cout << "\t Number of degrees of freedom: " << dof_handler.n_dofs()
+              << std::endl;
 
     mass_matrix.reinit(sparsity_pattern);
     stiffness_matrix.reinit(sparsity_pattern);
@@ -372,13 +441,17 @@ void ElasticProblem<dim>::setup_system()
     old_displacement.reinit(dof_handler.n_dofs());
     displacement.reinit(dof_handler.n_dofs());
     system_rhs.reinit(dof_handler.n_dofs());
+    old_forces.reinit(dof_handler.n_dofs());
+    // Loads at time 0
+    // TODO: Check, if initial conditions should be set at the beginning
+    old_forces=0.0;
 }
 
 
 template <int dim>
 void ElasticProblem<dim>::assemble_system()
 {
-    QGauss<dim> quadrature_formula(2);
+    QGauss<dim> quadrature_formula(parameters.quad_order);
 
     FEValues<dim> fe_values(fe,
                             quadrature_formula,
@@ -480,9 +553,10 @@ void ElasticProblem<dim>::assemble_system()
 template <int dim>
 void ElasticProblem<dim>::assemble_rhs()
 {
+    std::cout<<"\t Assemble system "<<std::endl;
     system_rhs=0.0;
 
-    QGauss<dim> quadrature_formula(2);
+    QGauss<dim> quadrature_formula(parameters.quad_order);
 
     FEValues<dim> fe_values(fe,
                             quadrature_formula,
@@ -536,13 +610,18 @@ void ElasticProblem<dim>::assemble_rhs()
     old_velocity=velocity;
     old_displacement=displacement;
 
-    // TODO: Split up the force vector to F= delta_t*theta*F_n+1 + delta_t*(1-theta)*F_n
-    // RHS=(M-theta*(1-theta)*delta_t^2*K)*V_n - delta_t*K* D_n + delta_t* F
-    system_rhs*=time.get_delta_t();
+
+    // RHS=(M-theta*(1-theta)*delta_t^2*K)*V_n - delta_t*K* D_n + delta_t*theta*F_n+1 + delta_t*(1-theta)*F_n
 
     // tmp vector to store intermediate results
     Vector<double> tmp;
     tmp.reinit(dof_handler.n_dofs());
+
+    tmp=system_rhs;
+
+    system_rhs*=time.get_delta_t() * parameters.theta;
+    system_rhs.add(time.get_delta_t()*(1-parameters.theta), old_forces);
+    old_forces=tmp;
 
     mass_matrix.vmult(tmp, old_velocity);
     system_rhs.add(1,tmp);
@@ -553,7 +632,7 @@ void ElasticProblem<dim>::assemble_rhs()
     stiffness_matrix.vmult(tmp, old_displacement);
     system_rhs.add(-time.get_delta_t(), tmp);
 
-    hanging_node_constraints.condense(system_rhs);
+    //    hanging_node_constraints.condense(system_rhs);
 
     // Rebuild system_matrix every timestep, since applying the BC deletes certain rows and columns
     system_matrix=0.0;
@@ -561,7 +640,7 @@ void ElasticProblem<dim>::assemble_rhs()
 
     system_matrix.add(time.get_delta_t()*time.get_delta_t()*parameters.theta*parameters.theta, stiffness_matrix);
 
-    hanging_node_constraints.condense(system_matrix);
+    //    hanging_node_constraints.condense(system_matrix);
 
 
     // 0 refers to the boundary_id
@@ -581,6 +660,7 @@ void ElasticProblem<dim>::assemble_rhs()
 template <int dim>
 void ElasticProblem<dim>::solve()
 {
+    std::cout<<"\t CG solver: "<<std::endl;
     SolverControl solver_control(1000, 1e-12);
     SolverCG<>    cg(solver_control);
 
@@ -589,7 +669,11 @@ void ElasticProblem<dim>::solve()
 
     cg.solve(system_matrix, velocity, system_rhs, preconditioner);
 
-    hanging_node_constraints.distribute(velocity);
+    //Assert divergence
+    Assert(velocity.linfty_norm()<1e4, ExcMessage("Linear system diverged"));
+    std::cout<<"\t     No of iterations:\t"<<solver_control.last_step()
+            <<"\n \t     Final residual:\t"<<solver_control.last_value()<<std::endl;
+    //    hanging_node_constraints.distribute(velocity);
 }
 
 template <int dim>
@@ -628,15 +712,15 @@ void ElasticProblem<dim>::output_results(const unsigned int timestep) const
     }
 
 
-    //1 refers to the polynomial degree
     //Visualize the displacements on a displaced grid
-    MappingQEulerian<dim> q_mapping(1, dof_handler, displacement);
+    MappingQEulerian<dim> q_mapping(parameters.poly_degree, dof_handler, displacement);
 
     data_out.add_data_vector(displacement, solution_names);
-    data_out.build_patches(q_mapping, 1);
+    data_out.build_patches(q_mapping, parameters.poly_degree);
 
     std::ofstream output("solution-" + std::to_string(timestep) + ".vtk");
     data_out.write_vtk(output);
+    std::cout<< "\t Output written to solution-" + std::to_string(timestep) + ".vtk \n" <<std::endl;
 }
 
 
@@ -650,19 +734,17 @@ void ElasticProblem<dim>::run()
 
     output_results(time.get_timestep());
 
-
-    std::cout << "   Number of active cells:       "
-              << triangulation.n_active_cells() << std::endl;
-
-    std::cout << "   Number of degrees of freedom: " << dof_handler.n_dofs()
-              << std::endl;
-
     assemble_system();
 
-    while(time.current() < time.end())
+    while(time.get_timestep() < time.get_n_timesteps())
     {
 
         time.increment();
+
+        std::cout << "  Time = " <<time.current()
+                  << " at timestep " << time.get_timestep()
+                  << " of " <<time.get_n_timesteps()
+                  << std::endl;
 
         assemble_rhs();
 
@@ -680,6 +762,10 @@ int main()
 {
     try
     {
+        std::cout << "--------------------------------------------------\n"
+                  << "             Running deal.ii solver \n"
+                  << "--------------------------------------------------\n"
+                  <<std::endl;
 
         const unsigned int dim = 2;
 
