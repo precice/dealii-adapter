@@ -8,3 +8,6 @@ for which this program calculates the linear elastic solid mechanics.
 
 The linear elastic model is based on the step-8 tutorial program of the deal.II library and has been extended to linear elasto-dynamics.
 Currently, the solver is extended with additional features to enable the coupling by preCICE.
+
+## Start here
+Our [wiki](https://github.com/precice/dealii-adapter/wiki) will help you start.
