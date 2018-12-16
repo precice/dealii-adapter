@@ -35,8 +35,9 @@
 
 #include <deal.II/fe/fe_system.h>
 #include <deal.II/fe/fe_q.h>
-
 #include <deal.II/fe/mapping_q_eulerian.h>
+
+//#include "precice/SolverInterface.hpp"
 
 #include <fstream>
 #include <iostream>
@@ -173,11 +174,69 @@ void FESystem::parse_parameters(ParameterHandler &prm)
     prm.leave_subsection();
 }
 
+struct precice_configuration
+{
+    std::string config_file;
+    std::string participant;
+    std::string mesh;
+    std::string read_data_name;
+    std::string write_data_name;
+    unsigned int interface_mesh_ID;
+
+    static void
+    declare_parameters(ParameterHandler &prm);
+
+    void
+    parse_parameters(ParameterHandler &prm);
+};
+
+
+void precice_configuration::declare_parameters(ParameterHandler &prm)
+{
+    prm.enter_subsection("precice configuration");
+    {
+        prm.declare_entry("precice config-file", "precice-config.xml",
+                          Patterns::Anything(),
+                          "Name of the precice configuration file");
+        prm.declare_entry("Participant", "dealiisolver",
+                          Patterns::Anything(),
+                          "Name of the participant in the precice-config.xml file");
+        prm.declare_entry("Mesh name", "dealii-interface",
+                          Patterns::Anything(),
+                          "Name of the coupling mesh in the precice-config.xml file");
+        prm.declare_entry("Read data name", "received-data",
+                          Patterns::Anything(),
+                          "Name of the read data in the precice-config.xml file");
+        prm.declare_entry("Write data name", "calculated-data",
+                          Patterns::Anything(),
+                          "Name of the write data in the precice-config.xml file");
+        prm.declare_entry("Interface mesh ID", "1",
+                          Patterns::Integer(0),
+                          "Boundary mesh ID of the coupling interface in deal.II");
+    }
+    prm.leave_subsection();
+}
+
+void precice_configuration::parse_parameters(ParameterHandler &prm)
+{
+    prm.enter_subsection("precice configuration");
+    {
+        config_file = prm.get("precice config-file");
+        participant = prm.get("Participant");
+        mesh = prm.get("Mesh name");
+        read_data_name = prm.get("Read data name");
+        write_data_name = prm.get("Write data name");
+        interface_mesh_ID = prm.get_integer("Interface mesh ID");
+    }
+    prm.leave_subsection();
+}
+
 
 struct AllParameters :
         public Time,
         public Materials,
-        public FESystem
+        public FESystem,
+        public precice_configuration
 {
     AllParameters(const std::string &input_file);
 
@@ -201,6 +260,7 @@ void AllParameters::declare_parameters(ParameterHandler &prm)
     Time::declare_parameters(prm);
     Materials::declare_parameters(prm);
     FESystem::declare_parameters(prm);
+    precice_configuration::declare_parameters(prm);
 }
 
 void AllParameters::parse_parameters(ParameterHandler &prm)
@@ -208,8 +268,8 @@ void AllParameters::parse_parameters(ParameterHandler &prm)
     Time::parse_parameters(prm);
     Materials::parse_parameters(prm);
     FESystem::parse_parameters(prm);
+    precice_configuration::parse_parameters(prm);
 }
-
 
 }
 
@@ -311,6 +371,7 @@ private:
     SparseMatrix<double> mass_matrix;
     SparseMatrix<double> stiffness_matrix;
     SparseMatrix<double> system_matrix;
+    SparseMatrix<double> stepping_matrix;
 
     Vector<double> old_velocity;
     Vector<double> velocity;
@@ -431,6 +492,7 @@ void ElasticProblem<dim>::setup_system()
     mass_matrix.reinit(sparsity_pattern);
     stiffness_matrix.reinit(sparsity_pattern);
     system_matrix.reinit(sparsity_pattern);
+    stepping_matrix.reinit(sparsity_pattern);
 
     MatrixCreator::create_mass_matrix (dof_handler, QGauss<dim>(2),
                                        mass_matrix);
@@ -532,20 +594,21 @@ void ElasticProblem<dim>::assemble_system()
         for (unsigned int i = 0; i < dofs_per_cell; ++i)
         {
             for (unsigned int j = 0; j < dofs_per_cell; ++j)
-                system_matrix.add(local_dof_indices[i],
-                                  local_dof_indices[j],
-                                  cell_matrix(i, j));
+                stiffness_matrix.add(local_dof_indices[i],
+                                     local_dof_indices[j],
+                                     cell_matrix(i, j));
 
         }
     }
 
-    stiffness_matrix.copy_from(system_matrix);
+    // To save the system_matrix
+    stepping_matrix.copy_from(stiffness_matrix);
 
-    system_matrix*=time.get_delta_t()*time.get_delta_t()*parameters.theta*parameters.theta;
+    stepping_matrix*=time.get_delta_t()*time.get_delta_t()*parameters.theta*parameters.theta;
 
-    system_matrix.add(1,mass_matrix);
+    stepping_matrix.add(1,mass_matrix);
 
-    hanging_node_constraints.condense(system_matrix);
+    hanging_node_constraints.condense(stepping_matrix);
 
 }
 
@@ -632,15 +695,11 @@ void ElasticProblem<dim>::assemble_rhs()
     stiffness_matrix.vmult(tmp, old_displacement);
     system_rhs.add(-time.get_delta_t(), tmp);
 
-    //    hanging_node_constraints.condense(system_rhs);
+    hanging_node_constraints.condense(system_rhs);
 
-    // Rebuild system_matrix every timestep, since applying the BC deletes certain rows and columns
+    // Copy the system_matrix every timestep, since applying the BC deletes certain rows and columns
     system_matrix=0.0;
-    system_matrix.copy_from(mass_matrix);
-
-    system_matrix.add(time.get_delta_t()*time.get_delta_t()*parameters.theta*parameters.theta, stiffness_matrix);
-
-    //    hanging_node_constraints.condense(system_matrix);
+    system_matrix.copy_from(stepping_matrix);
 
 
     // 0 refers to the boundary_id
@@ -673,7 +732,7 @@ void ElasticProblem<dim>::solve()
     Assert(velocity.linfty_norm()<1e4, ExcMessage("Linear system diverged"));
     std::cout<<"\t     No of iterations:\t"<<solver_control.last_step()
             <<"\n \t     Final residual:\t"<<solver_control.last_value()<<std::endl;
-    //    hanging_node_constraints.distribute(velocity);
+    hanging_node_constraints.distribute(velocity);
 }
 
 template <int dim>
@@ -690,32 +749,20 @@ template <int dim>
 void ElasticProblem<dim>::output_results(const unsigned int timestep) const
 {
     DataOut<dim> data_out;
-    data_out.attach_dof_handler(dof_handler);
+    std::vector<DataComponentInterpretation::DataComponentInterpretation>
+            data_component_interpretation(dim,
+                                          DataComponentInterpretation::component_is_part_of_vector);
 
-    std::vector<std::string> solution_names;
-    switch (dim)
-    {
-    case 1:
-        solution_names.emplace_back("displacement");
-        break;
-    case 2:
-        solution_names.emplace_back("x_displacement");
-        solution_names.emplace_back("y_displacement");
-        break;
-    case 3:
-        solution_names.emplace_back("x_displacement");
-        solution_names.emplace_back("y_displacement");
-        solution_names.emplace_back("z_displacement");
-        break;
-    default:
-        Assert(false, ExcNotImplemented());
-    }
+    std::vector<std::string> solution_name(dim, "displacement");
+    data_out.attach_dof_handler(dof_handler);
+    data_out.add_data_vector(displacement,
+                             solution_name,
+                             DataOut<dim>::type_dof_data,
+                             data_component_interpretation);
 
 
     //Visualize the displacements on a displaced grid
     MappingQEulerian<dim> q_mapping(parameters.poly_degree, dof_handler, displacement);
-
-    data_out.add_data_vector(displacement, solution_names);
     data_out.build_patches(q_mapping, parameters.poly_degree);
 
     std::ofstream output("solution-" + std::to_string(timestep) + ".vtk");
@@ -727,7 +774,6 @@ void ElasticProblem<dim>::output_results(const unsigned int timestep) const
 template <int dim>
 void ElasticProblem<dim>::run()
 {
-
     make_grid();
 
     setup_system();

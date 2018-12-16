@@ -32,3 +32,18 @@ subsection Finite element system
     # Gauss quadrature order
     set Quadrature order    = 3
 end
+
+subsection precice configuration
+	# Name of the precice configuration file
+	set precice config-file	= precice-config.xml
+	# Name of the participant in the precice-config.xml file
+	set Participant    	= solid
+	# Name of the coupling mesh in the precice-config.xml file
+	set Mesh name		= solid_nodes
+	# Name of the read data in the precice-config.xml file 
+	set Read data name	= force
+	# Name of the write data in the precice-config.xml file 
+	set Write data name	= displacement
+	# Boundary mesh ID of the coupling interface in deal.II
+	set Interface mesh ID	= 1
+end
