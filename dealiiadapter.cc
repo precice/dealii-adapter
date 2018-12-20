@@ -822,10 +822,10 @@ void ElasticProblem<dim>::initialize_precice()
     int position_iterator=0;
     for (IndexSet::ElementIterator element=coupling_dofs.begin(); element!=coupling_dofs.end(); element++)
     {
-        for(int jj=0; jj<dim; jj++)
+        for(int jj=0; jj<dim; ++jj)
             interface_nodes_positions[position_iterator * dim + jj] = support_points[*element][jj];
 
-        position_iterator++;
+         ++position_iterator;
     }
 
     // store initial write_data
@@ -885,12 +885,12 @@ template <int dim>
 void ElasticProblem<dim>::get_write_data(double *write_data)
 {
     int data_iterator = 0;
-    for (IndexSet::ElementIterator element=coupling_dofs.begin(); element!=coupling_dofs.end(); element++)
+    for (auto element=coupling_dofs.begin(); element!=coupling_dofs.end(); ++element)
     {
-        for(int jj=0; jj<dim; jj++)
+        for(int jj=0; jj<dim; ++jj)
             write_data[data_iterator * dim + jj] = displacement[*element+jj];
 
-        data_iterator++;
+         ++data_iterator;
     }
 
 }
