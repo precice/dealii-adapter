@@ -181,7 +181,7 @@ struct precice_configuration
     std::string mesh;
     std::string read_data_name;
     std::string write_data_name;
-    unsigned int interface_mesh_ID;
+    unsigned int interface_mesh_id;
 
     static void
     declare_parameters(ParameterHandler &prm);
@@ -226,7 +226,7 @@ void precice_configuration::parse_parameters(ParameterHandler &prm)
         mesh = prm.get("Mesh name");
         read_data_name = prm.get("Read data name");
         write_data_name = prm.get("Write data name");
-        interface_mesh_ID = prm.get_integer("Interface mesh ID");
+        interface_mesh_id = prm.get_integer("Interface mesh ID");
     }
     prm.leave_subsection();
 }
@@ -355,12 +355,10 @@ private:
     void update_displacement();
     void output_results(const unsigned int timestep) const;
     //precice related functions
-    void configure_precice();
     void initialize_precice();
-    void exchange_precice_data();
-    void finalize_precice();
-    void get_write_data(double *write_data);
-    void get_read_data(double *read_data);
+    void advance_precice();
+    void extract_relevant_displacements(std::vector<double>& precice_displacements);
+    void apply_precice_forces(std::vector<double>& precice_forces);
 
 
     Parameters::AllParameters parameters;
@@ -388,16 +386,17 @@ private:
     Vector<double> forces;
     Vector<double> system_rhs;
     //precice related initializations
-    int             meshID;
-    int             read_data_ID;
-    int             write_data_ID;
+    int             mesh_id;
+    int             read_data_id;
+    int             write_data_id;
     int             n_interface_nodes;
 
-    double          *read_data, *write_data;
-    double          *interface_nodes_positions;
-    int             *interface_nodes_IDs;
+    std::vector<double>     precice_forces;
+    std::vector<double>     precice_displacements;
+    std::vector<double>     interface_nodes_positions;
+    std::vector<int>        interface_nodes_ids;
 
-    IndexSet        coupling_dofs;
+    IndexSet                coupling_dofs;
 
     precice::SolverInterface         precice;
 };
@@ -487,6 +486,19 @@ void ElasticProblem<dim>::make_grid()
 
     std::cout << "\t Number of active cells:       "
               << triangulation.n_active_cells() << std::endl;
+
+    // Boundary 0 is clamped, 4 and 5 are only relevant for 3D
+    typename Triangulation<dim>::active_cell_iterator cell =
+            triangulation.begin_active(), endc = triangulation.end();
+    for (; cell != endc; ++cell)
+        for (unsigned int face = 0; face < GeometryInfo<dim>::faces_per_cell; ++face)
+        {
+            if (cell->face(face)->at_boundary() ==  true
+                    && cell->face(face)->boundary_id ()!=0
+                    && cell->face(face)->boundary_id ()!=4
+                    && cell->face(face)->boundary_id ()!=5)
+                cell->face(face)->set_boundary_id(parameters.interface_mesh_id);
+        }
 
 }
 
@@ -792,120 +804,119 @@ void ElasticProblem<dim>::output_results(const unsigned int timestep) const
 }
 
 template <int dim>
-void ElasticProblem<dim>::configure_precice()
-{
-    precice.configure(parameters.config_file);
-    meshID = precice.getMeshID(parameters.mesh);
-    read_data_ID  = precice.getDataID(parameters.read_data_name, meshID);
-    write_data_ID = precice.getDataID(parameters.write_data_name, meshID);
-}
-
-template <int dim>
 void ElasticProblem<dim>::initialize_precice()
 {
-    //get n_interface_nodes
+    // Assert matching dimensions between deal.ii and precice
+    // Only valid for the current adapter setup
+    // TODO: Adapt for quasi-2D cases (#5)
+    Assert(dim == precice.getDimensions(),
+           ExcDimensionMismatch(dim, precice.getDimensions()));
+
+    // get precice specific IDs from precice
+    precice.configure(parameters.config_file);
+    mesh_id = precice.getMeshID(parameters.mesh);
+    read_data_id  = precice.getDataID(parameters.read_data_name, mesh_id);
+    write_data_id = precice.getDataID(parameters.write_data_name, mesh_id);
+
+
+    // get the number of interface nodes from deal.ii
     std::set<types::boundary_id> couplingBoundary;
-    couplingBoundary.insert(parameters.interface_mesh_ID);
+    couplingBoundary.insert(parameters.interface_mesh_id);
     const FEValuesExtractors::Scalar x_displacement(0);
 
     DoFTools::extract_boundary_dofs(dof_handler, fe.component_mask(x_displacement), coupling_dofs, couplingBoundary);
     n_interface_nodes = coupling_dofs.n_elements();//TODO: Adapt
 
-    write_data = new double [dim * n_interface_nodes];
-    read_data  = new double [dim * n_interface_nodes];
-    interface_nodes_positions = new double [dim*n_interface_nodes];
-    interface_nodes_IDs       = new int [n_interface_nodes];
+    precice_displacements.resize(dim * n_interface_nodes);
+    precice_forces.resize(dim * n_interface_nodes);
+    interface_nodes_positions.resize(dim * n_interface_nodes);
+    interface_nodes_ids.resize(n_interface_nodes);
 
-    // get nodes_positions
+
+    // get the coordinates of the interface nodes from deal.ii
     std::map<types::global_dof_index, Point<dim>> support_points;
     DoFTools::map_dofs_to_support_points(MappingQ1<dim>(), dof_handler, support_points);
+    // support_points contains now the coordinates of all dofs
+    // in the next step, the relevant coordinates are extracted using the extracted coupling_dofs
     int position_iterator=0;
-    for (IndexSet::ElementIterator element=coupling_dofs.begin(); element!=coupling_dofs.end(); element++)
+    for (auto element=coupling_dofs.begin(); element!=coupling_dofs.end(); ++element)
     {
         for(int jj=0; jj<dim; ++jj)
             interface_nodes_positions[position_iterator * dim + jj] = support_points[*element][jj];
 
-         ++position_iterator;
+        ++position_iterator;
     }
 
     // store initial write_data
-    get_write_data(write_data);
+    extract_relevant_displacements(precice_displacements);
 
-    precice.setMeshVertices(meshID, n_interface_nodes, interface_nodes_positions, interface_nodes_IDs);
+    precice.setMeshVertices(mesh_id, n_interface_nodes, interface_nodes_positions.data(), interface_nodes_ids.data());
 
     precice.initialize();
 
     //Write initial writeData to preCICE
     if (precice.isActionRequired(precice::constants::actionWriteInitialData()))
     {
-        precice.writeBlockVectorData(write_data_ID, n_interface_nodes, interface_nodes_IDs, write_data);
+        precice.writeBlockVectorData(write_data_id, n_interface_nodes, interface_nodes_ids.data(), precice_displacements.data());
         precice.fulfilledAction(precice::constants::actionWriteInitialData());
+
+        precice.initializeData();
     }
 
-    precice.initializeData();
 
     //Read initial readData from preCICE for the first time step
     if (precice.isReadDataAvailable())
-        precice.readBlockVectorData(read_data_ID, n_interface_nodes, interface_nodes_IDs, read_data);
+        precice.readBlockVectorData(read_data_id, n_interface_nodes, interface_nodes_ids.data(), precice_forces.data());
 
-    get_read_data(read_data);
+    apply_precice_forces(precice_forces);
 
 }
 
 template <int dim>
-void ElasticProblem<dim>::exchange_precice_data()
+void ElasticProblem<dim>::advance_precice()
 {
     if(precice.isWriteDataRequired(time.get_delta_t()))
     {
-        get_write_data(write_data);
-        precice.writeBlockVectorData(write_data_ID, n_interface_nodes, interface_nodes_IDs, write_data);
+        extract_relevant_displacements(precice_displacements);
+        precice.writeBlockVectorData(write_data_id, n_interface_nodes, interface_nodes_ids.data(), precice_displacements.data());
     }
 
     precice.advance(time.get_delta_t());
 
     if(precice.isReadDataAvailable())
     {
-        precice.readBlockVectorData(read_data_ID, n_interface_nodes, interface_nodes_IDs, read_data);
-        get_read_data(read_data);
+        precice.readBlockVectorData(read_data_id, n_interface_nodes, interface_nodes_ids.data(), precice_forces.data());
+        apply_precice_forces(precice_forces);
     }
 }
 
 template <int dim>
-void ElasticProblem<dim>::finalize_precice()
-{
-    delete[] read_data;
-    delete[] write_data;
-    delete[] interface_nodes_IDs;
-    delete[] interface_nodes_positions;
-
-    precice.finalize();
-}
-
-template <int dim>
-void ElasticProblem<dim>::get_write_data(double *write_data)
+void ElasticProblem<dim>::extract_relevant_displacements(std::vector<double>& precice_displacements)
 {
     int data_iterator = 0;
     for (auto element=coupling_dofs.begin(); element!=coupling_dofs.end(); ++element)
     {
         for(int jj=0; jj<dim; ++jj)
-            write_data[data_iterator * dim + jj] = displacement[*element+jj];
+            precice_displacements[data_iterator * dim + jj] = displacement[*element+jj];
 
-         ++data_iterator;
+        ++data_iterator;
     }
 
 }
 
+// this function just stores the force data at the respective position in the force vector,
+// which is later used in the assemble_rhs function to build the RHS
 template <int dim>
-void ElasticProblem<dim>::get_read_data(double *read_data)
+void ElasticProblem<dim>::apply_precice_forces(std::vector<double>& precice_forces)
 {
     forces = 0;
     int data_iterator = 0;
-    for (IndexSet::ElementIterator element=coupling_dofs.begin(); element!=coupling_dofs.end(); element++)
+    for (auto element=coupling_dofs.begin(); element!=coupling_dofs.end(); ++element)
     {
-        for(int jj=0; jj<dim; jj++)
-            forces[*element + jj] = read_data[data_iterator * dim + jj];
+        for(int jj=0; jj<dim; ++jj)
+            forces[*element + jj] = precice_forces[data_iterator * dim + jj];
 
-        data_iterator++;
+        ++data_iterator;
     }
 
 }
@@ -921,7 +932,6 @@ void ElasticProblem<dim>::run()
 
     assemble_system();
 
-    configure_precice();
     initialize_precice();
 
     while(precice.isCouplingOngoing() &&
@@ -941,14 +951,13 @@ void ElasticProblem<dim>::run()
 
         update_displacement();
 
-        exchange_precice_data();
+        advance_precice();
 
         output_results(time.get_timestep());
 
     }
 
-    finalize_precice();
-
+    precice.finalize();
 }
 } //end namespace adapter
 
