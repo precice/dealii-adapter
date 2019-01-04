@@ -178,7 +178,8 @@ struct precice_configuration
 {
     std::string config_file;
     std::string participant;
-    std::string mesh;
+    std::string node_mesh;
+    std::string face_mesh;
     std::string read_data_name;
     std::string write_data_name;
     unsigned int interface_mesh_id;
@@ -201,9 +202,12 @@ void precice_configuration::declare_parameters(ParameterHandler &prm)
         prm.declare_entry("Participant", "dealiisolver",
                           Patterns::Anything(),
                           "Name of the participant in the precice-config.xml file");
-        prm.declare_entry("Mesh name", "dealii-interface",
+        prm.declare_entry("Node mesh name", "dealii-mesh-nodes",
                           Patterns::Anything(),
-                          "Name of the coupling mesh in the precice-config.xml file");
+                          "Name of the node based coupling mesh in the precice-config.xml file");
+        prm.declare_entry("Face mesh name", "dealii-mesh-faces",
+                          Patterns::Anything(),
+                          "Name of the face based coupling mesh in the precice-config.xml file");
         prm.declare_entry("Read data name", "received-data",
                           Patterns::Anything(),
                           "Name of the read data in the precice-config.xml file");
@@ -223,7 +227,8 @@ void precice_configuration::parse_parameters(ParameterHandler &prm)
     {
         config_file = prm.get("precice config-file");
         participant = prm.get("Participant");
-        mesh = prm.get("Mesh name");
+        node_mesh = prm.get("Node mesh name");
+        face_mesh = prm.get("Face mesh name");
         read_data_name = prm.get("Read data name");
         write_data_name = prm.get("Write data name");
         interface_mesh_id = prm.get_integer("Interface mesh ID");
@@ -386,15 +391,19 @@ private:
     Vector<double> forces;
     Vector<double> system_rhs;
     //precice related initializations
-    int             mesh_id;
-    int             read_data_id;
-    int             write_data_id;
+    int             node_mesh_id;
+    int             face_mesh_id;
+    int             forces_data_id;
+    int             displacements_data_id;
     int             n_interface_nodes;
+    int             n_interface_faces;
 
     std::vector<double>     precice_forces;
     std::vector<double>     precice_displacements;
     std::vector<double>     interface_nodes_positions;
     std::vector<int>        interface_nodes_ids;
+    std::vector<double>     interface_faces_positions;
+    std::vector<int>        interface_faces_ids;
 
     IndexSet                coupling_dofs;
 
@@ -487,7 +496,10 @@ void ElasticProblem<dim>::make_grid()
     std::cout << "\t Number of active cells:       "
               << triangulation.n_active_cells() << std::endl;
 
-    // Boundary 0 is clamped, 4 and 5 are only relevant for 3D
+    // Boundary 0 is clamped, 4 and 5 (out-of-plane) are only relevant for 3D
+    // count simultaniously the relevant coupling faces
+    n_interface_faces = 0;
+
     typename Triangulation<dim>::active_cell_iterator cell =
             triangulation.begin_active(), endc = triangulation.end();
     for (; cell != endc; ++cell)
@@ -497,9 +509,11 @@ void ElasticProblem<dim>::make_grid()
                     && cell->face(face)->boundary_id ()!=0
                     && cell->face(face)->boundary_id ()!=4
                     && cell->face(face)->boundary_id ()!=5)
+            {
                 cell->face(face)->set_boundary_id(parameters.interface_mesh_id);
+                ++n_interface_faces;
+            }
         }
-
 }
 
 template <int dim>
@@ -658,7 +672,7 @@ void ElasticProblem<dim>::assemble_rhs()
 
     FEValues<dim> fe_values(fe,
                             quadrature_formula,
-                            update_values | update_gradients |
+                            update_values |
                             update_quadrature_points | update_JxW_values);
 
     const unsigned int dofs_per_cell = fe.dofs_per_cell;
@@ -668,33 +682,44 @@ void ElasticProblem<dim>::assemble_rhs()
 
     std::vector<types::global_dof_index> local_dof_indices(dofs_per_cell);
 
-
-    // Like the two constant functions above, the function
-    // right_hand_side is called once per cell.
-    //    std::vector<Tensor<1, dim>> rhs_values(n_q_points);
-    //    right_hand_side(cell, fe_values.get_quadrature_points(), rhs_values, parameters.interface_mesh_ID);
+    // In order to convert the array precice forces in a vector format
+    Tensor<1, dim>      force_vector;
+    // Looks for the right value to assign to the vector
+    int force_iterator  = 0;
 
     for (const auto &cell : dof_handler.active_cell_iterators())
     {
         cell_rhs    = 0;
         fe_values.reinit(cell);
 
-        cell->get_dof_indices(local_dof_indices);
-
         // Assembling the right hand side force vector
-        for (unsigned int i = 0; i < dofs_per_cell; ++i)
-        {
-            //            const unsigned int component_i =
-            //                    fe.system_to_component_index(i).first;
+        for (unsigned int face = 0; face < GeometryInfo<dim>::faces_per_cell;
+             ++face)
+            if (cell->face(face)->at_boundary() == true &&
+                    cell->face(face)->boundary_id() == parameters.interface_mesh_id)
+            {
+                // store coupling data in a vector
+                for(uint jj = 0; jj < dim; ++jj)
+                    force_vector[jj] = precice_forces[force_iterator * dim + jj];
 
-            for (unsigned int q_point = 0; q_point < n_q_points; ++q_point)
-            { cell_rhs(i) += fe_values.shape_value(i, q_point) *
-                        forces(local_dof_indices[i])*
-                        fe_values.JxW(q_point);
+                ++force_iterator;
+
+                for (unsigned int q_point = 0; q_point < n_q_points; ++q_point)
+                {
+                    for (unsigned int i = 0; i < dofs_per_cell; ++i)
+                    {
+                        const unsigned int component_i =
+                                fe.system_to_component_index(i).first;
+
+                        cell_rhs(i) += fe_values.shape_value(i, q_point) *
+                                force_vector[component_i] *
+                                fe_values.JxW(q_point);
+                    }
+                }
             }
-        }
 
         // local dofs to global
+        cell->get_dof_indices(local_dof_indices);
         for (unsigned int i = 0; i < dofs_per_cell; ++i)
         {
             system_rhs(local_dof_indices[i]) += cell_rhs(i);
@@ -747,8 +772,8 @@ void ElasticProblem<dim>::assemble_rhs()
                                        velocity,
                                        system_rhs);
 
-
 }
+
 template <int dim>
 void ElasticProblem<dim>::solve()
 {
@@ -806,17 +831,20 @@ void ElasticProblem<dim>::output_results(const unsigned int timestep) const
 template <int dim>
 void ElasticProblem<dim>::initialize_precice()
 {
+
+    // get precice specific IDs from precice
+    precice.configure(parameters.config_file);
+
     // Assert matching dimensions between deal.ii and precice
     // Only valid for the current adapter setup
     // TODO: Adapt for quasi-2D cases (#5)
     Assert(dim == precice.getDimensions(),
            ExcDimensionMismatch(dim, precice.getDimensions()));
 
-    // get precice specific IDs from precice
-    precice.configure(parameters.config_file);
-    mesh_id = precice.getMeshID(parameters.mesh);
-    read_data_id  = precice.getDataID(parameters.read_data_name, mesh_id);
-    write_data_id = precice.getDataID(parameters.write_data_name, mesh_id);
+    node_mesh_id = precice.getMeshID(parameters.node_mesh);
+    face_mesh_id = precice.getMeshID(parameters.face_mesh);
+    forces_data_id  = precice.getDataID(parameters.read_data_name, face_mesh_id);
+    displacements_data_id = precice.getDataID(parameters.write_data_name, node_mesh_id);
 
 
     // get the number of interface nodes from deal.ii
@@ -827,8 +855,10 @@ void ElasticProblem<dim>::initialize_precice()
     DoFTools::extract_boundary_dofs(dof_handler, fe.component_mask(x_displacement), coupling_dofs, couplingBoundary);
     n_interface_nodes = coupling_dofs.n_elements();//TODO: Adapt
 
+    std::cout << "\t Number of coupling nodes:     "
+              << n_interface_nodes << std::endl;
+
     precice_displacements.resize(dim * n_interface_nodes);
-    precice_forces.resize(dim * n_interface_nodes);
     interface_nodes_positions.resize(dim * n_interface_nodes);
     interface_nodes_ids.resize(n_interface_nodes);
 
@@ -838,26 +868,65 @@ void ElasticProblem<dim>::initialize_precice()
     DoFTools::map_dofs_to_support_points(MappingQ1<dim>(), dof_handler, support_points);
     // support_points contains now the coordinates of all dofs
     // in the next step, the relevant coordinates are extracted using the extracted coupling_dofs
-    int position_iterator=0;
+    int node_position_iterator=0;
     for (auto element=coupling_dofs.begin(); element!=coupling_dofs.end(); ++element)
     {
         for(int jj=0; jj<dim; ++jj)
-            interface_nodes_positions[position_iterator * dim + jj] = support_points[*element][jj];
+            interface_nodes_positions[node_position_iterator * dim + jj] = support_points[*element][jj];
 
-        ++position_iterator;
+        ++node_position_iterator;
     }
 
-    // store initial write_data
-    extract_relevant_displacements(precice_displacements);
+    // pass node coordinates to precice
+    precice.setMeshVertices(node_mesh_id, n_interface_nodes, interface_nodes_positions.data(), interface_nodes_ids.data());
 
-    precice.setMeshVertices(mesh_id, n_interface_nodes, interface_nodes_positions.data(), interface_nodes_ids.data());
+    // same for the face based mesh
+    // number of coupling faces already obtained in the make_grid function
+    precice_forces.resize(dim * n_interface_faces);
+    interface_faces_positions.resize(dim * n_interface_faces);
+    interface_faces_ids.resize(n_interface_faces);
+
+    std::cout << "\t Number of coupling faces:     "
+              << n_interface_faces << std::endl;
+
+
+    // get the coordinates of the face centers and store them in interface_faces_positions
+    typename DoFHandler<dim>::active_cell_iterator
+            cell = dof_handler.begin_active(),
+            endc = dof_handler.end();
+
+    int face_position_iterator = 0;
+    for (; cell!=endc; ++cell)
+        for (unsigned int face=0; face<GeometryInfo<dim>::faces_per_cell; ++face)
+        {
+            if (cell->face(face)->at_boundary()
+                    &&
+                    (cell->face(face)->boundary_id() == parameters.interface_mesh_id))
+            {
+
+                for(int jj=0; jj<dim; ++jj)
+                    interface_faces_positions[face_position_iterator * dim + jj] = cell->face(face)->center()[jj];
+
+                //locally_owned_face_indices[coupling_face_iter]=cell->face_index(f);
+                //store the index of the coupling face
+                //this is necessary to assign the right face with the right value using multithreading
+                ++face_position_iterator;
+            }
+        }
+
+
+    // pass face coordinates to precice
+    precice.setMeshVertices(face_mesh_id, n_interface_faces, interface_faces_positions.data(), interface_faces_ids.data());
 
     precice.initialize();
 
     //Write initial writeData to preCICE
     if (precice.isActionRequired(precice::constants::actionWriteInitialData()))
     {
-        precice.writeBlockVectorData(write_data_id, n_interface_nodes, interface_nodes_ids.data(), precice_displacements.data());
+        // store initial write_data for precice in precice_displacements
+        extract_relevant_displacements(precice_displacements);
+
+        precice.writeBlockVectorData(displacements_data_id, n_interface_nodes, interface_nodes_ids.data(), precice_displacements.data());
         precice.fulfilledAction(precice::constants::actionWriteInitialData());
 
         precice.initializeData();
@@ -866,9 +935,10 @@ void ElasticProblem<dim>::initialize_precice()
 
     //Read initial readData from preCICE for the first time step
     if (precice.isReadDataAvailable())
-        precice.readBlockVectorData(read_data_id, n_interface_nodes, interface_nodes_ids.data(), precice_forces.data());
+        precice.readBlockVectorData(forces_data_id, n_interface_faces, interface_faces_ids.data(), precice_forces.data());
 
-    apply_precice_forces(precice_forces);
+    // this function is currently unnecessary (and wrong), since the precice forces are directly used in the assembly function
+    //    apply_precice_forces(precice_forces);
 
 }
 
@@ -878,15 +948,17 @@ void ElasticProblem<dim>::advance_precice()
     if(precice.isWriteDataRequired(time.get_delta_t()))
     {
         extract_relevant_displacements(precice_displacements);
-        precice.writeBlockVectorData(write_data_id, n_interface_nodes, interface_nodes_ids.data(), precice_displacements.data());
+        precice.writeBlockVectorData(displacements_data_id, n_interface_nodes, interface_nodes_ids.data(), precice_displacements.data());
     }
 
     precice.advance(time.get_delta_t());
 
     if(precice.isReadDataAvailable())
     {
-        precice.readBlockVectorData(read_data_id, n_interface_nodes, interface_nodes_ids.data(), precice_forces.data());
-        apply_precice_forces(precice_forces);
+        precice.readBlockVectorData(forces_data_id, n_interface_faces, interface_faces_ids.data(), precice_forces.data());
+
+        // this function is currently unnecessary (and wrong), since the precice forces are directly used in the assembly function
+        //        apply_precice_forces(precice_forces);
     }
 }
 
