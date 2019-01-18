@@ -469,29 +469,61 @@ void ElasticProblem<dim>::make_grid()
 {
     std::cout<<"  Create mesh: "<<std::endl;
 
-    std::vector< std::vector< double > > stepsize( dim );
-    std::vector<double> x_direction  (5);//number of cells in this direction
-    std::vector<double> y_direction  (1);//number of cells in this direction
+    // if you like to specify a grading (every cell width)
+    //    std::vector< std::vector< double > > stepsize( dim );
+    //    std::vector<double> x_direction  (n_x);//number of cells in this direction
+    //    std::vector<double> y_direction  (n_y);//number of cells in this direction
+    //    std::vector<double> z_direction  (n_z);//number of cells in this direction
 
-    //length of cells in x-direction
-    for (int i=0; i<5; i++)
-        x_direction[i]=(0.6-0.24899)/5;
+    //    //length of cells in x-direction
+    //    for (uint i=0; i<n_x; ++i)
+    //        x_direction[i]=(0.6-0.24899)/n_x;
 
-    //length of cells in y-direction
-    y_direction[0]=0.02;
+    //    //length of cells in y-direction
+    //    for (uint i=0; i<n_x; ++i)
+    //        y_direction[i]=(0.21-0.19)/n_y;
 
-    stepsize[0] = x_direction;
-    stepsize[1] = y_direction;
+    //    //length of cells in y-direction
+    //    for (uint i=0; i<n_z; ++i)
+    //        y_direction[i]=(0.005+0.005)/n_z;
 
+    //    stepsize[0] = x_direction;
+    //    stepsize[1] = y_direction;
+    //    stepsize[2] = z_direction;
+
+//FSI 3
+//    uint n_x = 30;
+//    uint n_y = 5;
+//    uint n_z = 1;
+
+//    std::vector< unsigned int > repetitions(dim);
+//    repetitions[0] = n_x;
+//    repetitions[1] = n_y;
+//    repetitions[2] = n_z;
+
+//    GridGenerator::subdivided_hyper_rectangle(triangulation,
+//                                              repetitions,
+//                                              (dim==3 ? Point<dim>(0.24899, 0.19, -0.005) : Point<dim>(0.24899, 0.19)),
+//                                              (dim==3 ? Point<dim>(0.6, 0.21, 0.005) : Point<dim>(0.6, 0.21)),
+//                                              true);
+
+    uint n_x = 5;
+    uint n_y = 30;
+    uint n_z = 1;
+
+    std::vector< unsigned int > repetitions(dim);
+    repetitions[0] = n_x;
+    repetitions[1] = n_y;
+    repetitions[2] = n_z;
 
     GridGenerator::subdivided_hyper_rectangle(triangulation,
-                                              stepsize,
-                                              (dim==3 ? Point<dim>(0.24899, 0.19, 0.05) : Point<dim>(0.24899, 0.19)),
-                                              (dim==3 ? Point<dim>(0.6, 0.21, 0.05) : Point<dim>(0.6, 0.21)),
+                                              repetitions,
+                                              (dim==3 ? Point<dim>(-0.05, 0, 0) : Point<dim>(0.24899, 0.19)),
+                                              (dim==3 ? Point<dim>(0.05, 1, 0.3) : Point<dim>(0.6, 0.21)),
                                               true);
 
     //TODO: Add refinement to parameter class
-    triangulation.refine_global(1);
+    triangulation.refine_global(0);
 
     std::cout << "\t Number of active cells:       "
               << triangulation.n_active_cells() << std::endl;
@@ -505,14 +537,14 @@ void ElasticProblem<dim>::make_grid()
     for (; cell != endc; ++cell)
         for (unsigned int face = 0; face < GeometryInfo<dim>::faces_per_cell; ++face)
         {
-            if (cell->face(face)->at_boundary() ==  true
-                    && cell->face(face)->boundary_id ()!=0
-                    && cell->face(face)->boundary_id ()!=4
-                    && cell->face(face)->boundary_id ()!=5)
-            {
-                cell->face(face)->set_boundary_id(parameters.interface_mesh_id);
-                ++n_interface_faces;
-            }
+            if (cell->face(face)->at_boundary() ==  true)
+                if(cell->face(face)->boundary_id ()!=2
+                        && cell->face(face)->boundary_id ()!=4
+                        && cell->face(face)->boundary_id ()!=5)
+                {
+                    cell->face(face)->set_boundary_id(parameters.interface_mesh_id);
+                    ++n_interface_faces;
+                }
         }
 }
 
@@ -761,12 +793,28 @@ void ElasticProblem<dim>::assemble_rhs()
 
 
     // 0 refers to the boundary_id
+    // 4 and 5 out-of-plane
     // TODO: Parametrize
+//    const FEValuesExtractors::Scalar x_component(0);
+//    const FEValuesExtractors::Scalar y_displacement(1);
+    const FEValuesExtractors::Scalar z_component(2);
+
     std::map<types::global_dof_index, double> boundary_values;
     VectorTools::interpolate_boundary_values(dof_handler,
-                                             0,
+                                             2,
                                              Functions::ZeroFunction<dim>(dim),
                                              boundary_values);
+    VectorTools::interpolate_boundary_values(dof_handler,
+                                             4,
+                                             Functions::ZeroFunction<dim>(dim),
+                                             boundary_values,
+                                             fe.component_mask(z_component));
+    VectorTools::interpolate_boundary_values(dof_handler,
+                                             5,
+                                             Functions::ZeroFunction<dim>(dim),
+                                             boundary_values,
+                                             fe.component_mask(z_component));
+
     MatrixTools::apply_boundary_values(boundary_values,
                                        system_matrix,
                                        velocity,
@@ -823,7 +871,7 @@ void ElasticProblem<dim>::output_results(const unsigned int timestep) const
     MappingQEulerian<dim> q_mapping(parameters.poly_degree, dof_handler, displacement);
     data_out.build_patches(q_mapping, parameters.poly_degree);
 
-    std::ofstream output("solution-" + std::to_string(timestep) + ".vtk");
+    std::ofstream output("dealii_output/solution-" + std::to_string(timestep) + ".vtk");
     data_out.write_vtk(output);
     std::cout<< "\t Output written to solution-" + std::to_string(timestep) + ".vtk \n" <<std::endl;
 }
@@ -1042,7 +1090,7 @@ int main()
                   << "--------------------------------------------------\n"
                   <<std::endl;
 
-        const unsigned int dim = 2;
+        const unsigned int dim = 3;
 
         adapter::ElasticProblem<dim> elastic_solver("parameters.prm");
         elastic_solver.run();
