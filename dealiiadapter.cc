@@ -491,21 +491,21 @@ void ElasticProblem<dim>::make_grid()
     //    stepsize[1] = y_direction;
     //    stepsize[2] = z_direction;
 
-//FSI 3
-//    uint n_x = 30;
-//    uint n_y = 5;
-//    uint n_z = 1;
+    //FSI 3
+    //    uint n_x = 30;
+    //    uint n_y = 5;
+    //    uint n_z = 1;
 
-//    std::vector< unsigned int > repetitions(dim);
-//    repetitions[0] = n_x;
-//    repetitions[1] = n_y;
-//    repetitions[2] = n_z;
+    //    std::vector< unsigned int > repetitions(dim);
+    //    repetitions[0] = n_x;
+    //    repetitions[1] = n_y;
+    //    repetitions[2] = n_z;
 
-//    GridGenerator::subdivided_hyper_rectangle(triangulation,
-//                                              repetitions,
-//                                              (dim==3 ? Point<dim>(0.24899, 0.19, -0.005) : Point<dim>(0.24899, 0.19)),
-//                                              (dim==3 ? Point<dim>(0.6, 0.21, 0.005) : Point<dim>(0.6, 0.21)),
-//                                              true);
+    //    GridGenerator::subdivided_hyper_rectangle(triangulation,
+    //                                              repetitions,
+    //                                              (dim==3 ? Point<dim>(0.24899, 0.19, -0.005) : Point<dim>(0.24899, 0.19)),
+    //                                              (dim==3 ? Point<dim>(0.6, 0.21, 0.005) : Point<dim>(0.6, 0.21)),
+    //                                              true);
 
     uint n_x = 5;
     uint n_y = 30;
@@ -793,10 +793,11 @@ void ElasticProblem<dim>::assemble_rhs()
 
 
     // 0 refers to the boundary_id
+
     // 4 and 5 out-of-plane
     // TODO: Parametrize
-//    const FEValuesExtractors::Scalar x_component(0);
-//    const FEValuesExtractors::Scalar y_displacement(1);
+    //    const FEValuesExtractors::Scalar x_component(0);
+    //    const FEValuesExtractors::Scalar y_displacement(1);
     const FEValuesExtractors::Scalar z_component(2);
 
     std::map<types::global_dof_index, double> boundary_values;
@@ -819,7 +820,6 @@ void ElasticProblem<dim>::assemble_rhs()
                                        system_matrix,
                                        velocity,
                                        system_rhs);
-
 }
 
 template <int dim>
