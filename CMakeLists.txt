@@ -15,10 +15,8 @@ SET(TARGET "dealiiadapter")
 # or switch altogether to the large project CMakeLists.txt file discussed
 # in the "CMake in user projects" page accessible from the "User info"
 # page of the documentation.
-INCLUDE_DIRECTORIES($ENV{PRECICE_ROOT}/src)
 SET(TARGET_SRC
   ${TARGET}.cc
-  $ENV{PRECICE_ROOT}/src/precice/SolverInterface.hpp
   )
 
 # Usually, you will not need to modify anything beyond this point...
@@ -37,7 +35,10 @@ IF(NOT ${deal.II_FOUND})
 ENDIF()
 
 DEAL_II_INITIALIZE_CACHED_VARIABLES()
-PROJECT(${TARGET})
+
+PROJECT(${TARGET} LANGUAGES CXX)
+
 DEAL_II_INVOKE_AUTOPILOT()
-TARGET_INCLUDE_DIRECTORIES(${TARGET} PUBLIC $ENV{PRECICE_ROOT}/build/last)
-TARGET_LINK_LIBRARIES(${TARGET} $ENV{PRECICE_ROOT}/build/last/libprecice.so)
+
+FIND_PACKAGE(precice REQUIRED)
+TARGET_LINK_LIBRARIES(${TARGET} precice::precice)
