@@ -299,7 +299,7 @@ public:
 
         if((time_end/delta_t)-n_timesteps>1e-12)
         {
-            n_timesteps++;
+            ++n_timesteps;
             std::cerr<< "  Warning: Timestep size is not a multiple of the end time.\n"
                      << "           Simulation will be terminated at t = "
                      <<n_timesteps*delta_t
@@ -339,6 +339,12 @@ public:
         ++timestep;
     }
 
+    void restore()
+    {
+        time_current -= delta_t;
+        --timestep;
+    }
+
 private:
     unsigned int timestep;
     double       time_current;
@@ -370,6 +376,8 @@ private:
     void advance_precice();
     void extract_relevant_displacements(std::vector<double>& precice_displacements);
     void apply_precice_forces(std::vector<double>& precice_forces);
+    void save_old_state();
+    void reload_old_state();
 
 
     Parameters::AllParameters parameters;
@@ -397,6 +405,13 @@ private:
     Vector<double> forces;
     Vector<double> system_rhs;
     Vector<double> gravitational_force;
+
+    // variables for implicit coupling
+    Vector<double> old_state_old_velocity;
+    Vector<double> old_state_old_displacement;
+    Vector<double> old_state_old_forces;
+    Vector<double> old_state_forces;
+
     //precice related initializations
     int             node_mesh_id;
     int             face_mesh_id;
@@ -411,6 +426,8 @@ private:
     std::vector<int>        interface_nodes_ids;
     std::vector<double>     interface_faces_positions;
     std::vector<int>        interface_faces_ids;
+
+
 
     IndexSet                coupling_dofs;
 
@@ -1088,6 +1105,40 @@ void ElasticProblem<dim>::apply_precice_forces(std::vector<double>& precice_forc
             forces[*element + jj] = precice_forces[data_iterator * dim + jj];
 
         ++data_iterator;
+    }
+
+}
+
+template <int dim>
+void ElasticProblem<dim>::save_old_state()
+{
+    // Store current state for implict coupling
+    if (precice.isActionRequired(precice::constants::actionWriteIterationCheckpoint()))
+    {
+        old_state_old_velocity = old_velocity;
+        old_state_old_displacement = old_displacement;
+        old_state_old_forces = old_forces;
+
+        precice.fulfilledAction(precice::constants::actionWriteIterationCheckpoint());
+    }
+
+}
+
+template <int dim>
+void ElasticProblem<dim>::reload_old_state()
+{
+    // Load old state for implicit coupling
+    if (precice.isActionRequired(precice::constants::actionReadIterationCheckpoint()))
+    {
+        velocity = old_velocity;
+        old_velocity = old_state_old_velocity;
+        displacement = old_displacement;
+        old_displacement = old_state_old_displacement;
+        old_forces = old_state_old_forces;
+
+        time.restore();
+
+        precice.fulfilledAction(precice::constants::actionReadIterationCheckpoint());
     }
 
 }
