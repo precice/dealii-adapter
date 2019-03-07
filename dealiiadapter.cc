@@ -54,6 +54,7 @@ struct Time
     double delta_t;
     double end_time;
     double theta;
+    int    output_interval;
 
     static void
     declare_parameters(ParameterHandler &prm);
@@ -91,6 +92,8 @@ void Time::parse_parameters(ParameterHandler &prm)
         theta = prm.get_double("theta");
     }
     prm.leave_subsection();
+    // write outputfiles every x timesteps
+    output_interval = 10;
 }
 
 struct Materials
@@ -412,9 +415,10 @@ private:
 
     // variables for implicit coupling
     Vector<double> old_state_old_velocity;
+    Vector<double> old_state_velocity;
     Vector<double> old_state_old_displacement;
+    Vector<double> old_state_displacement;
     Vector<double> old_state_old_forces;
-    Vector<double> old_state_forces;
 
     //precice related initializations
     int             node_mesh_id;
@@ -484,8 +488,25 @@ void ElasticProblem<dim>::make_grid()
     //    stepsize[2] = z_direction;
 
     //FSI 3
-    //    uint n_x = 30;
-    //    uint n_y = 5;
+    uint n_x = 30;
+    uint n_y = 5;
+    uint n_z = 1;
+
+    std::vector< unsigned int > repetitions(dim);
+    repetitions[0] = n_x;
+    repetitions[1] = n_y;
+    if ( dim==3 )
+        repetitions[2] = n_z;
+
+    GridGenerator::subdivided_hyper_rectangle(triangulation,
+                                              repetitions,
+                                              (dim==3 ? Point<dim>(0.24899, 0.19, -0.005) : Point<dim>(0.24899, 0.19)),
+                                              (dim==3 ? Point<dim>(0.6, 0.21, 0.005) : Point<dim>(0.6, 0.21)),
+                                              true);
+
+    // flap_perp
+    //    uint n_x = 5;
+    //    uint n_y = 30;
     //    uint n_z = 1;
 
     //    std::vector< unsigned int > repetitions(dim);
@@ -495,24 +516,9 @@ void ElasticProblem<dim>::make_grid()
 
     //    GridGenerator::subdivided_hyper_rectangle(triangulation,
     //                                              repetitions,
-    //                                              (dim==3 ? Point<dim>(0.24899, 0.19, 0) : Point<dim>(0.24899, 0.19)),
-    //                                              (dim==3 ? Point<dim>(0.6, 0.21, 1) : Point<dim>(0.6, 0.21)),
+    //                                              (dim==3 ? Point<dim>(-0.05, 0, 0) : Point<dim>(0.24899, 0.19)),
+    //                                              (dim==3 ? Point<dim>(0.05, 1, 0.3) : Point<dim>(0.6, 0.21)),
     //                                              true);
-
-    uint n_x = 5;
-    uint n_y = 30;
-    uint n_z = 1;
-
-    std::vector< unsigned int > repetitions(dim);
-    repetitions[0] = n_x;
-    repetitions[1] = n_y;
-    repetitions[2] = n_z;
-
-    GridGenerator::subdivided_hyper_rectangle(triangulation,
-                                              repetitions,
-                                              (dim==3 ? Point<dim>(-0.05, 0, 0) : Point<dim>(0.24899, 0.19)),
-                                              (dim==3 ? Point<dim>(0.05, 1, 0.3) : Point<dim>(0.6, 0.21)),
-                                              true);
 
     //TODO: Add refinement to parameter class
     triangulation.refine_global(0);
@@ -587,11 +593,14 @@ void ElasticProblem<dim>::setup_system()
 
     old_velocity.reinit(dof_handler.n_dofs());
     velocity.reinit(dof_handler.n_dofs());
+
     old_displacement.reinit(dof_handler.n_dofs());
     displacement.reinit(dof_handler.n_dofs());
+
     system_rhs.reinit(dof_handler.n_dofs());
     old_forces.reinit(dof_handler.n_dofs());
     forces.reinit(dof_handler.n_dofs());
+
     gravitational_force.reinit(dof_handler.n_dofs());
 
     // Loads at time 0
@@ -599,7 +608,7 @@ void ElasticProblem<dim>::setup_system()
     old_forces=0.0;
 
     //const value of gravity (e.g. 9.81) and its direction (x (0),y(1) or z(2))
-    compute_gravity     = true;
+    compute_gravity     = false;
     gravity_value       = -2;
     gravity_direction   =  1;
 }
@@ -931,6 +940,8 @@ void ElasticProblem<dim>::compute_timesteps()
                       << " of " <<time.get_n_timesteps()
                       << std::endl;
 
+            save_old_state();
+
             assemble_rhs();
 
             solve();
@@ -939,7 +950,11 @@ void ElasticProblem<dim>::compute_timesteps()
 
             advance_precice();
 
-            output_results(time.get_timestep());
+            reload_old_state();
+
+            if(precice.isTimestepComplete()
+                    && time.get_timestep() % parameters.output_interval == 0)
+                output_results(time.get_timestep());
 
         }
 
@@ -962,7 +977,8 @@ void ElasticProblem<dim>::compute_timesteps()
 
             update_displacement();
 
-            output_results(time.get_timestep());
+            if( time.get_timestep() % parameters.output_interval == 0)
+                output_results(time.get_timestep());
         }
 }
 
@@ -1012,7 +1028,6 @@ void ElasticProblem<dim>::initialize_precice()
         for (uint it = 0; it  < precice_forces.size()/dim; it++)
         {
             precice_forces[it*dim]= 0;
-            //            precice_forces[it*dim+1]= -2*0.02*1000;
             precice_forces[it*dim+1]= 0;
             if(dim == 3)
                 precice_forces[it*dim+2]= 0;
@@ -1151,9 +1166,11 @@ void ElasticProblem<dim>::save_old_state()
     // Store current state for implict coupling
     if (precice.isActionRequired(precice::constants::actionWriteIterationCheckpoint()))
     {
-        old_state_old_velocity = old_velocity;
-        old_state_old_displacement = old_displacement;
-        old_state_old_forces = old_forces;
+        old_state_velocity          = velocity;
+        old_state_old_velocity      = old_velocity;
+        old_state_displacement      = displacement;
+        old_state_old_displacement  = old_displacement;
+        old_state_old_forces        = old_forces;
 
         precice.fulfilledAction(precice::constants::actionWriteIterationCheckpoint());
     }
@@ -1166,11 +1183,11 @@ void ElasticProblem<dim>::reload_old_state()
     // Load old state for implicit coupling
     if (precice.isActionRequired(precice::constants::actionReadIterationCheckpoint()))
     {
-        velocity = old_velocity;
-        old_velocity = old_state_old_velocity;
-        displacement = old_displacement;
-        old_displacement = old_state_old_displacement;
-        old_forces = old_state_old_forces;
+        velocity            = old_state_velocity;
+        old_velocity        = old_state_old_velocity;
+        displacement        = old_state_displacement;
+        old_displacement    = old_state_old_displacement;
+        old_forces          = old_state_old_forces;
 
         time.restore();
 
