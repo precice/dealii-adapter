@@ -404,7 +404,11 @@ private:
     Vector<double> old_forces;
     Vector<double> forces;
     Vector<double> system_rhs;
+
+    bool           compute_gravity;
     Vector<double> gravitational_force;
+    double         gravity_value;
+    int            gravity_direction;
 
     // variables for implicit coupling
     Vector<double> old_state_old_velocity;
@@ -426,7 +430,6 @@ private:
     std::vector<int>        interface_nodes_ids;
     std::vector<double>     interface_faces_positions;
     std::vector<int>        interface_faces_ids;
-
 
 
     IndexSet                coupling_dofs;
@@ -527,13 +530,27 @@ void ElasticProblem<dim>::make_grid()
         for (unsigned int face = 0; face < GeometryInfo<dim>::faces_per_cell; ++face)
         {
             if (cell->face(face)->at_boundary() ==  true)
-                if(cell->face(face)->boundary_id ()!=2
-                        && cell->face(face)->boundary_id ()!=4
-                        && cell->face(face)->boundary_id ()!=5)
+            {
+                //boundarys for the interface
+                if(cell->face(face)->boundary_id () == 1
+                        || cell->face(face)->boundary_id () == 2
+                        || cell->face(face)->boundary_id () == 3)
                 {
                     cell->face(face)->set_boundary_id(parameters.interface_mesh_id);
                     ++n_interface_faces;
                 }
+                //boundarys clamped in all directions
+                else if (cell->face(face)->boundary_id () == 0)
+                {
+                    cell->face(face)->set_boundary_id(0);
+                }
+                //boundarys clamped out-of-plane (z) direction
+                else if( cell->face(face)->boundary_id () ==4
+                         || cell->face(face)->boundary_id () ==5)
+                {
+                    cell->face(face)->set_boundary_id(4);
+                }
+            }
         }
 }
 
@@ -575,10 +592,16 @@ void ElasticProblem<dim>::setup_system()
     system_rhs.reinit(dof_handler.n_dofs());
     old_forces.reinit(dof_handler.n_dofs());
     forces.reinit(dof_handler.n_dofs());
+    gravitational_force.reinit(dof_handler.n_dofs());
 
     // Loads at time 0
     // TODO: Check, if initial conditions should be set at the beginning
     old_forces=0.0;
+
+    //const value of gravity (e.g. 9.81) and its direction (x (0),y(1) or z(2))
+    compute_gravity     = true;
+    gravity_value       = -2;
+    gravity_direction   =  1;
 }
 
 
@@ -682,6 +705,20 @@ void ElasticProblem<dim>::assemble_system()
 
     hanging_node_constraints.condense(stepping_matrix);
 
+    //Calculate contribution of gravity and store them in gravitational_force
+    if (compute_gravity)
+    {
+        Vector<double> gravity_vector(dim);
+        //assign the specified values, rho * g is assumed
+        gravity_vector[gravity_direction] = parameters.rho * gravity_value;
+
+        //create a constant function object
+        Functions::ConstantFunction<dim, double> gravity_function(gravity_vector);
+
+        VectorTools::create_right_hand_side( MappingQGeneric<dim>(parameters.poly_degree),
+                                             dof_handler, QGauss<dim>(parameters.quad_order),
+                                             gravity_function, gravitational_force);
+    }
 }
 
 
@@ -761,6 +798,10 @@ void ElasticProblem<dim>::assemble_rhs()
     old_velocity=velocity;
     old_displacement=displacement;
 
+    //Add contribution of gravitational forces
+    if (compute_gravity)
+        system_rhs.add(1,gravitational_force);
+
 
     // RHS=(M-theta*(1-theta)*delta_t^2*K)*V_n - delta_t*K* D_n + delta_t*theta*F_n+1 + delta_t*(1-theta)*F_n
 
@@ -790,16 +831,16 @@ void ElasticProblem<dim>::assemble_rhs()
     system_matrix.copy_from(stepping_matrix);
 
 
-    // 0 refers to the boundary_id
+    // 0 refers to the boundary_id, clamped in all directions
 
-    // 4 and 5 out-of-plane
+    // 4 out-of-plane (z) for 3D
     // TODO: Parametrize
     //    const FEValuesExtractors::Scalar x_component(0);
     //    const FEValuesExtractors::Scalar y_displacement(1);
 
     std::map<types::global_dof_index, double> boundary_values;
     VectorTools::interpolate_boundary_values(dof_handler,
-                                             2,
+                                             0,
                                              Functions::ZeroFunction<dim>(dim),
                                              boundary_values);
     if (dim == 3)
@@ -808,11 +849,6 @@ void ElasticProblem<dim>::assemble_rhs()
 
         VectorTools::interpolate_boundary_values(dof_handler,
                                                  4,
-                                                 Functions::ZeroFunction<dim>(dim),
-                                                 boundary_values,
-                                                 fe.component_mask(z_component));
-        VectorTools::interpolate_boundary_values(dof_handler,
-                                                 5,
                                                  Functions::ZeroFunction<dim>(dim),
                                                  boundary_values,
                                                  fe.component_mask(z_component));
@@ -976,8 +1012,8 @@ void ElasticProblem<dim>::initialize_precice()
         for (uint it = 0; it  < precice_forces.size()/dim; it++)
         {
             precice_forces[it*dim]= 0;
-            precice_forces[it*dim+1]= -2*0.02*1000;
-            //            precice_forces[it*dim+1]= 0;
+            //            precice_forces[it*dim+1]= -2*0.02*1000;
+            precice_forces[it*dim+1]= 0;
             if(dim == 3)
                 precice_forces[it*dim+2]= 0;
         }
