@@ -285,6 +285,37 @@ void AllParameters::parse_parameters(ParameterHandler &prm)
 }
 
 }
+//evaluate strains as a tensor in the data out object
+template <int dim>
+class StrainPostprocessor : public DataPostprocessorTensor<dim>
+{
+public:
+    StrainPostprocessor ()
+        :
+          DataPostprocessorTensor<dim> ("strain",
+                                        update_gradients)
+    {}
+    virtual
+    void
+    evaluate_vector_field (const DataPostprocessorInputs::Vector<dim> &input_data,
+                           std::vector<Vector<double> >               &computed_quantities) const
+    {
+        AssertDimension (input_data.solution_gradients.size(),
+                         computed_quantities.size());
+        for (unsigned int p=0; p<input_data.solution_gradients.size(); ++p)
+        {
+            AssertDimension (computed_quantities[p].size(),
+                             (Tensor<2,dim>::n_independent_components));
+            for (unsigned int d=0; d<dim; ++d)
+                for (unsigned int e=0; e<dim; ++e)
+                    computed_quantities[p][Tensor<2,dim>::component_to_unrolled_index(TableIndices<2>(d,e))]
+                            = (input_data.solution_gradients[p][d][e]
+                               +
+                               input_data.solution_gradients[p][e][d]) / 2;
+        }
+    }
+};
+
 
 // Class for the simulation time
 class Time
@@ -390,7 +421,8 @@ private:
     Time                      time;
     DoFHandler<dim>    dof_handler;
 
-    FESystem<dim> fe;
+    FESystem<dim>               fe;
+    MappingQGeneric<dim>   mapping;
 
     AffineConstraints<double> hanging_node_constraints;
 
@@ -449,6 +481,7 @@ ElasticProblem<dim>::ElasticProblem(const std::string &input_file)
     , time(parameters.end_time, parameters.delta_t)
     , dof_handler(triangulation)
     , fe(FE_Q<dim>(parameters.poly_degree), dim)
+    , mapping(MappingQGeneric<dim>(parameters.poly_degree))
     , precice(parameters.participant,0,1)
 {}
 
@@ -586,7 +619,7 @@ void ElasticProblem<dim>::setup_system()
     system_matrix.reinit(sparsity_pattern);
     stepping_matrix.reinit(sparsity_pattern);
 
-    MatrixCreator::create_mass_matrix (MappingQGeneric<dim>(parameters.poly_degree),
+    MatrixCreator::create_mass_matrix (mapping,
                                        dof_handler, QGauss<dim>(parameters.quad_order),
                                        mass_matrix);
     mass_matrix*=parameters.rho;
@@ -619,7 +652,8 @@ void ElasticProblem<dim>::assemble_system()
 {
     QGauss<dim> quadrature_formula(parameters.quad_order);
 
-    FEValues<dim> fe_values(fe,
+    FEValues<dim> fe_values(mapping,
+                            fe,
                             quadrature_formula,
                             update_values | update_gradients |
                             update_quadrature_points | update_JxW_values);
@@ -634,7 +668,6 @@ void ElasticProblem<dim>::assemble_system()
 
     std::vector<double> lambda_values(n_q_points);
     std::vector<double> mu_values(n_q_points);
-
 
     // Lame constants
     Functions::ConstantFunction<dim> lambda(parameters.lambda), mu(parameters.mu);
@@ -724,7 +757,7 @@ void ElasticProblem<dim>::assemble_system()
         //create a constant function object
         Functions::ConstantFunction<dim, double> gravity_function(gravity_vector);
 
-        VectorTools::create_right_hand_side( MappingQGeneric<dim>(parameters.poly_degree),
+        VectorTools::create_right_hand_side( mapping,
                                              dof_handler, QGauss<dim>(parameters.quad_order),
                                              gravity_function, gravitational_force);
     }
@@ -739,7 +772,8 @@ void ElasticProblem<dim>::assemble_rhs()
 
     QGauss<dim-1> face_quadrature_formula(parameters.quad_order);
 
-    FEFaceValues<dim> fe_face_values(fe,
+    FEFaceValues<dim> fe_face_values(mapping,
+                                     fe,
                                      face_quadrature_formula,
                                      update_values |
                                      update_quadrature_points | update_JxW_values);
@@ -802,6 +836,7 @@ void ElasticProblem<dim>::assemble_rhs()
         }
 
     }
+
 
     // Update variables
     old_velocity=velocity;
@@ -900,7 +935,9 @@ void ElasticProblem<dim>::update_displacement()
 
 template <int dim>
 void ElasticProblem<dim>::output_results(const unsigned int timestep) const
-{
+{      
+    StrainPostprocessor<dim> strain_u;
+
     DataOut<dim> data_out;
     std::vector<DataComponentInterpretation::DataComponentInterpretation>
             data_component_interpretation(dim,
@@ -913,6 +950,7 @@ void ElasticProblem<dim>::output_results(const unsigned int timestep) const
                              DataOut<dim>::type_dof_data,
                              data_component_interpretation);
 
+    data_out.add_data_vector(displacement, strain_u);
 
     //Visualize the displacements on a displaced grid
     MappingQEulerian<dim> q_mapping(parameters.poly_degree, dof_handler, displacement);
@@ -1044,6 +1082,7 @@ void ElasticProblem<dim>::initialize_precice()
     {
         // get the coordinates of the interface nodes from deal.ii
         std::map<types::global_dof_index, Point<dim>> support_points;
+        //TODO: Check mapping: Maybe add the mapping object to get the coordinates of higher order shape functions
         DoFTools::map_dofs_to_support_points(MappingQ1<dim>(), dof_handler, support_points);
         // support_points contains now the coordinates of all dofs
         // in the next step, the relevant coordinates are extracted using the extracted coupling_dofs
@@ -1183,6 +1222,7 @@ void ElasticProblem<dim>::reload_old_state()
     // Load old state for implicit coupling
     if (precice.isActionRequired(precice::constants::actionReadIterationCheckpoint()))
     {
+        //TODO: Validate subcycling
         velocity            = old_state_velocity;
         old_velocity        = old_state_old_velocity;
         displacement        = old_state_displacement;
