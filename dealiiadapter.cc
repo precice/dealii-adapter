@@ -202,7 +202,7 @@ void precice_configuration::declare_parameters(ParameterHandler &prm)
     {
         prm.declare_entry("Enable precice", "true",
                           Patterns::Bool(),
-                          "Use the precice-adapte for a coupled simulation or just the solver");
+                          "Whether preCICE is used for coupling to another solver");
         prm.declare_entry("precice config-file", "precice-config.xml",
                           Patterns::Anything(),
                           "Name of the precice configuration file");
@@ -537,7 +537,7 @@ void ElasticProblem<dim>::make_grid()
         {
             if (cell->face(face)->at_boundary() ==  true)
             {
-                //boundarys for the interface
+                //boundaries for the interface
                 if(cell->face(face)->boundary_id () == 1
                         || cell->face(face)->boundary_id () == 2
                         || cell->face(face)->boundary_id () == 3)

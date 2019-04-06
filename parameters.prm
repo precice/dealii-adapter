@@ -34,7 +34,7 @@ subsection Finite element system
 end
 
 subsection precice configuration
-	# Use the precice-adapte for a coupled simulation or just the solver
+	# Whether preCICE is used for coupling to another solver
 	set Enable precice	= false
 
 	# Name of the precice configuration file
