@@ -378,7 +378,6 @@ private:
     void initialize_precice();
     void advance_precice();
     void extract_relevant_displacements(std::vector<double>& precice_displacements);
-    void apply_precice_forces(std::vector<double>& precice_forces);
     void save_old_state();
     void reload_old_state();
 
@@ -465,28 +464,6 @@ void ElasticProblem<dim>::make_grid()
 {
     std::cout<<"  Create mesh: "<<std::endl;
 
-    // if you like to specify a grading (every cell width)
-    //    std::vector< std::vector< double > > stepsize( dim );
-    //    std::vector<double> x_direction  (n_x);//number of cells in this direction
-    //    std::vector<double> y_direction  (n_y);//number of cells in this direction
-    //    std::vector<double> z_direction  (n_z);//number of cells in this direction
-
-    //    //length of cells in x-direction
-    //    for (uint i=0; i<n_x; ++i)
-    //        x_direction[i]=(0.6-0.24899)/n_x;
-
-    //    //length of cells in y-direction
-    //    for (uint i=0; i<n_x; ++i)
-    //        y_direction[i]=(0.21-0.19)/n_y;
-
-    //    //length of cells in y-direction
-    //    for (uint i=0; i<n_z; ++i)
-    //        y_direction[i]=(0.005+0.005)/n_z;
-
-    //    stepsize[0] = x_direction;
-    //    stepsize[1] = y_direction;
-    //    stepsize[2] = z_direction;
-
     //FSI 3
     uint n_x = 30;
     uint n_y = 5;
@@ -503,22 +480,6 @@ void ElasticProblem<dim>::make_grid()
                                               (dim==3 ? Point<dim>(0.24899, 0.19, -0.005) : Point<dim>(0.24899, 0.19)),
                                               (dim==3 ? Point<dim>(0.6, 0.21, 0.005) : Point<dim>(0.6, 0.21)),
                                               true);
-
-    // flap_perp
-    //    uint n_x = 5;
-    //    uint n_y = 30;
-    //    uint n_z = 1;
-
-    //    std::vector< unsigned int > repetitions(dim);
-    //    repetitions[0] = n_x;
-    //    repetitions[1] = n_y;
-    //    repetitions[2] = n_z;
-
-    //    GridGenerator::subdivided_hyper_rectangle(triangulation,
-    //                                              repetitions,
-    //                                              (dim==3 ? Point<dim>(-0.05, 0, 0) : Point<dim>(0.24899, 0.19)),
-    //                                              (dim==3 ? Point<dim>(0.05, 1, 0.3) : Point<dim>(0.6, 0.21)),
-    //                                              true);
 
     //TODO: Add refinement to parameter class
     triangulation.refine_global(0);
@@ -844,9 +805,6 @@ void ElasticProblem<dim>::assemble_rhs()
 
     // 4 out-of-plane (z) for 3D
     // TODO: Parametrize
-    //    const FEValuesExtractors::Scalar x_component(0);
-    //    const FEValuesExtractors::Scalar y_displacement(1);
-
     std::map<types::global_dof_index, double> boundary_values;
     VectorTools::interpolate_boundary_values(dof_handler,
                                              0,
@@ -1098,15 +1056,10 @@ void ElasticProblem<dim>::initialize_precice()
             precice.initializeData();
         }
 
-
         //Read initial readData from preCICE for the first time step
         if (precice.isReadDataAvailable())
             precice.readBlockVectorData(forces_data_id, n_interface_faces, interface_faces_ids.data(), precice_forces.data());
-
-        // this function is currently unnecessary (and wrong), since the precice forces are directly used in the assembly function
-        //    apply_precice_forces(precice_forces);
     }
-
 }
 
 template <int dim>
@@ -1123,9 +1076,6 @@ void ElasticProblem<dim>::advance_precice()
     if(precice.isReadDataAvailable())
     {
         precice.readBlockVectorData(forces_data_id, n_interface_faces, interface_faces_ids.data(), precice_forces.data());
-
-        // this function is currently unnecessary (and wrong), since the precice forces are directly used in the assembly function
-        //        apply_precice_forces(precice_forces);
     }
 }
 
@@ -1137,23 +1087,6 @@ void ElasticProblem<dim>::extract_relevant_displacements(std::vector<double>& pr
     {
         for(int jj=0; jj<dim; ++jj)
             precice_displacements[data_iterator * dim + jj] = displacement[*element+jj];
-
-        ++data_iterator;
-    }
-
-}
-
-// this function just stores the force data at the respective position in the force vector,
-// which is later used in the assemble_rhs function to build the RHS
-template <int dim>
-void ElasticProblem<dim>::apply_precice_forces(std::vector<double>& precice_forces)
-{
-    forces = 0;
-    int data_iterator = 0;
-    for (auto element=coupling_dofs.begin(); element!=coupling_dofs.end(); ++element)
-    {
-        for(int jj=0; jj<dim; ++jj)
-            forces[*element + jj] = precice_forces[data_iterator * dim + jj];
 
         ++data_iterator;
     }
