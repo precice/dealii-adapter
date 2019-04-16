@@ -384,7 +384,11 @@ private:
 
     Parameters::AllParameters parameters;
 
+    //grid related variables
     Triangulation<dim> triangulation;
+    unsigned int   global_refinement;
+    unsigned int   clamped_mesh_id;
+    unsigned int   out_of_plane_clamped_mesh_id;
 
     Time                      time;
     DoFHandler<dim>    dof_handler;
@@ -469,6 +473,10 @@ void ElasticProblem<dim>::make_grid()
     uint n_y = 5;
     uint n_z = 1;
 
+    //Refine all cells global_refinement times
+    global_refinement = 0;
+
+    //vector of dim values denoting the number of cells to generate in that direction
     std::vector< unsigned int > repetitions(dim);
     repetitions[0] = n_x;
     repetitions[1] = n_y;
@@ -479,15 +487,32 @@ void ElasticProblem<dim>::make_grid()
                                               repetitions,
                                               (dim==3 ? Point<dim>(0.24899, 0.19, -0.005) : Point<dim>(0.24899, 0.19)),
                                               (dim==3 ? Point<dim>(0.6, 0.21, 0.005) : Point<dim>(0.6, 0.21)),
-                                              true);
+                                              /*colorize*/true);
 
     //TODO: Add refinement to parameter class
-    triangulation.refine_global(0);
+    triangulation.refine_global(global_refinement);
 
     std::cout << "\t Number of active cells:       "
               << triangulation.n_active_cells() << std::endl;
 
-    // Boundary 0 is clamped, 4 and 5 (out-of-plane) are only relevant for 3D
+    // Boundary IDs as obtained by colorize = true
+    unsigned int                id_flap_left = 0; //x direction
+    unsigned int               id_flap_right = 1;
+    unsigned int              id_flap_bottom = 2; //y direction
+    unsigned int                 id_flap_top = 3;
+    unsigned int id_flap_out_of_plane_bottom = 4; //z direction
+    unsigned int    id_flap_out_of_plane_top = 5;
+
+    //set the desired IDs for clamped boundaries and out_of_plane clamped boundaries
+    //interface ID is set in the parameter file
+    clamped_mesh_id = 0;
+    out_of_plane_clamped_mesh_id = 4;
+
+    std::string error_message("The interface_id cannot be the same as the clamped one");
+    //The IDs must not be the same:
+    Assert(clamped_mesh_id != parameters.interface_mesh_id, ExcMessage(error_message));
+    Assert(out_of_plane_clamped_mesh_id != parameters.interface_mesh_id, ExcMessage(error_message));
+
     // count simultaniously the relevant coupling faces
     n_interface_faces = 0;
 
@@ -499,23 +524,23 @@ void ElasticProblem<dim>::make_grid()
             if (cell->face(face)->at_boundary() ==  true)
             {
                 //boundaries for the interface
-                if(cell->face(face)->boundary_id () == 1
-                        || cell->face(face)->boundary_id () == 2
-                        || cell->face(face)->boundary_id () == 3)
+                if(cell->face(face)->boundary_id () == id_flap_right
+                        || cell->face(face)->boundary_id () == id_flap_bottom
+                        || cell->face(face)->boundary_id () == id_flap_top)
                 {
                     cell->face(face)->set_boundary_id(parameters.interface_mesh_id);
                     ++n_interface_faces;
                 }
                 //boundarys clamped in all directions
-                else if (cell->face(face)->boundary_id () == 0)
+                else if (cell->face(face)->boundary_id () == id_flap_left)
                 {
-                    cell->face(face)->set_boundary_id(0);
+                    cell->face(face)->set_boundary_id(clamped_mesh_id);
                 }
                 //boundarys clamped out-of-plane (z) direction
-                else if( cell->face(face)->boundary_id () ==4
-                         || cell->face(face)->boundary_id () ==5)
+                else if( cell->face(face)->boundary_id () == id_flap_out_of_plane_bottom
+                         || cell->face(face)->boundary_id () ==id_flap_out_of_plane_top)
                 {
-                    cell->face(face)->set_boundary_id(4);
+                    cell->face(face)->set_boundary_id(out_of_plane_clamped_mesh_id);
                 }
             }
         }
@@ -698,6 +723,7 @@ void ElasticProblem<dim>::assemble_rhs()
     std::cout<<"\t Assemble system "<<std::endl;
     system_rhs=0.0;
 
+    // quadrature formula for integration over faces (dim-1)
     QGauss<dim-1> face_quadrature_formula(parameters.quad_order);
 
     FEFaceValues<dim> fe_face_values(fe,
@@ -800,22 +826,19 @@ void ElasticProblem<dim>::assemble_rhs()
     system_matrix=0.0;
     system_matrix.copy_from(stepping_matrix);
 
-
-    // 0 refers to the boundary_id, clamped in all directions
-
-    // 4 out-of-plane (z) for 3D
-    // TODO: Parametrize
+    // set Dirichlet BC
+    //clamped in all directions
     std::map<types::global_dof_index, double> boundary_values;
     VectorTools::interpolate_boundary_values(dof_handler,
-                                             0,
+                                             clamped_mesh_id,
                                              Functions::ZeroFunction<dim>(dim),
                                              boundary_values);
     if (dim == 3)
     {
         const FEValuesExtractors::Scalar z_component(2);
-
+        //clamped out_of_plane
         VectorTools::interpolate_boundary_values(dof_handler,
-                                                 4,
+                                                 out_of_plane_clamped_mesh_id,
                                                  Functions::ZeroFunction<dim>(dim),
                                                  boundary_values,
                                                  fe.component_mask(z_component));
@@ -898,7 +921,10 @@ void ElasticProblem<dim>::compute_timesteps()
                       << " of " <<time.get_n_timesteps()
                       << std::endl;
 
-            save_old_state();
+            if (precice.isActionRequired(precice::constants::actionWriteIterationCheckpoint())){
+                save_old_state();
+                precice.fulfilledAction(precice::constants::actionWriteIterationCheckpoint());
+            }
 
             assemble_rhs();
 
@@ -908,7 +934,10 @@ void ElasticProblem<dim>::compute_timesteps()
 
             advance_precice();
 
-            reload_old_state();
+            if (precice.isActionRequired(precice::constants::actionReadIterationCheckpoint())){
+                reload_old_state();
+                precice.fulfilledAction(precice::constants::actionReadIterationCheckpoint());
+            }
 
             if(precice.isTimestepComplete()
                     && time.get_timestep() % parameters.output_interval == 0)
@@ -1097,36 +1126,24 @@ template <int dim>
 void ElasticProblem<dim>::save_old_state()
 {
     // Store current state for implict coupling
-    if (precice.isActionRequired(precice::constants::actionWriteIterationCheckpoint()))
-    {
-        old_state_velocity          = velocity;
-        old_state_old_velocity      = old_velocity;
-        old_state_displacement      = displacement;
-        old_state_old_displacement  = old_displacement;
-        old_state_old_forces        = old_forces;
-
-        precice.fulfilledAction(precice::constants::actionWriteIterationCheckpoint());
-    }
-
+    old_state_velocity          = velocity;
+    old_state_old_velocity      = old_velocity;
+    old_state_displacement      = displacement;
+    old_state_old_displacement  = old_displacement;
+    old_state_old_forces        = old_forces;
 }
 
 template <int dim>
 void ElasticProblem<dim>::reload_old_state()
 {
     // Load old state for implicit coupling
-    if (precice.isActionRequired(precice::constants::actionReadIterationCheckpoint()))
-    {
-        velocity            = old_state_velocity;
-        old_velocity        = old_state_old_velocity;
-        displacement        = old_state_displacement;
-        old_displacement    = old_state_old_displacement;
-        old_forces          = old_state_old_forces;
+    velocity            = old_state_velocity;
+    old_velocity        = old_state_old_velocity;
+    displacement        = old_state_displacement;
+    old_displacement    = old_state_old_displacement;
+    old_forces          = old_state_old_forces;
 
-        time.restore();
-
-        precice.fulfilledAction(precice::constants::actionReadIterationCheckpoint());
-    }
-
+    time.restore();
 }
 
 template <int dim>
