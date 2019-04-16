@@ -75,6 +75,10 @@ void Time::declare_parameters(ParameterHandler &prm)
                           Patterns::Double(),
                           "Time step size");
 
+        prm.declare_entry("Output interval", "1",
+                          Patterns::Integer(0),
+                          "Write results every x timesteps");
+
         prm.declare_entry("theta", "0.5",
                           Patterns::Double(0,1),
                           "Time integration scheme");
@@ -89,11 +93,10 @@ void Time::parse_parameters(ParameterHandler &prm)
     {
         end_time = prm.get_double("End time");
         delta_t = prm.get_double("Time step size");
+        output_interval = prm.get_integer("Output interval");
         theta = prm.get_double("theta");
     }
     prm.leave_subsection();
-    // write outputfiles every x timesteps
-    output_interval = 10;
 }
 
 struct Materials
@@ -179,6 +182,7 @@ void FESystem::parse_parameters(ParameterHandler &prm)
 
 struct precice_configuration
 {
+    std::string scenario;
     bool        enable_precice;
     std::string config_file;
     std::string participant;
@@ -200,6 +204,9 @@ void precice_configuration::declare_parameters(ParameterHandler &prm)
 {
     prm.enter_subsection("precice configuration");
     {
+        prm.declare_entry("Scenario", "FSI3",
+                          Patterns::Selection("FSI3|PF"),
+                          "Cases: FSI3 or PF for perpendicular flap");
         prm.declare_entry("Enable precice", "true",
                           Patterns::Bool(),
                           "Whether preCICE is used for coupling to another solver");
@@ -232,6 +239,7 @@ void precice_configuration::parse_parameters(ParameterHandler &prm)
 {
     prm.enter_subsection("precice configuration");
     {
+        scenario = prm.get("Scenario");
         enable_precice = prm.get_bool("Enable precice");
         config_file = prm.get("precice config-file");
         participant = prm.get("Participant");
@@ -468,13 +476,60 @@ void ElasticProblem<dim>::make_grid()
 {
     std::cout<<"  Create mesh: "<<std::endl;
 
-    //FSI 3
-    uint n_x = 30;
-    uint n_y = 5;
-    uint n_z = 1;
+    uint n_x, n_y, n_z;
 
-    //Refine all cells global_refinement times
-    global_refinement = 0;
+    Point<dim>  point_bottom;
+    Point<dim>  point_tip;
+
+    // Boundary IDs are obtained through colorize = true
+    uint         id_flap_long_bottom;
+    uint            id_flap_long_top;
+    uint        id_flap_short_bottom;
+    uint           id_flap_short_top;
+    uint id_flap_out_of_plane_bottom;
+    uint    id_flap_out_of_plane_top;
+
+
+    if (parameters.scenario == "FSI3")
+    {
+        //FSI 3
+        n_x = 30;
+        n_y = 5;
+        n_z = 1;
+        point_bottom = dim==3 ? Point<dim>(0.24899, 0.19, -0.005) : Point<dim>(0.24899, 0.19);
+        point_tip    = dim==3 ? Point<dim>(0.6, 0.21, 0.005) : Point<dim>(0.6, 0.21);
+
+        //IDs for FSI3
+        id_flap_long_bottom = 2; //x direction
+        id_flap_long_top = 3;
+        id_flap_short_bottom = 0; //y direction
+        id_flap_short_top = 1;
+    }
+    else if(parameters.scenario == "PF")
+    {
+        //flap_perp
+        n_x = 5;
+        n_y = 30;
+        n_z = 1;
+        point_bottom = dim==3 ? Point<dim>(-0.05, 0, 0) : Point<dim>(0.24899, 0.19);
+        point_tip    = dim==3 ? Point<dim>(0.05, 1, 0.3) : Point<dim>(0.6, 0.21);
+
+        //IDs for PF
+        id_flap_long_bottom = 0; //x direction
+        id_flap_long_top = 1;
+        id_flap_short_bottom = 2; //y direction
+        id_flap_short_top = 3;
+    }
+    else
+    {
+        std::cout<<"Selected scenario is not preconfigured. Options are FSI3 and PF. "
+                <<"You might want to configure your own case in the make_grid function"
+               <<std::endl;
+    }
+
+    // same for both scenarios
+    id_flap_out_of_plane_bottom = 4; //z direction
+    id_flap_out_of_plane_top = 5;
 
     //vector of dim values denoting the number of cells to generate in that direction
     std::vector< unsigned int > repetitions(dim);
@@ -483,10 +538,14 @@ void ElasticProblem<dim>::make_grid()
     if ( dim==3 )
         repetitions[2] = n_z;
 
+    //Refine all cells global_refinement times
+    global_refinement = 0;
+
+
     GridGenerator::subdivided_hyper_rectangle(triangulation,
                                               repetitions,
-                                              (dim==3 ? Point<dim>(0.24899, 0.19, -0.005) : Point<dim>(0.24899, 0.19)),
-                                              (dim==3 ? Point<dim>(0.6, 0.21, 0.005) : Point<dim>(0.6, 0.21)),
+                                              point_bottom,
+                                              point_tip,
                                               /*colorize*/true);
 
     //TODO: Add refinement to parameter class
@@ -494,14 +553,6 @@ void ElasticProblem<dim>::make_grid()
 
     std::cout << "\t Number of active cells:       "
               << triangulation.n_active_cells() << std::endl;
-
-    // Boundary IDs as obtained by colorize = true
-    unsigned int                id_flap_left = 0; //x direction
-    unsigned int               id_flap_right = 1;
-    unsigned int              id_flap_bottom = 2; //y direction
-    unsigned int                 id_flap_top = 3;
-    unsigned int id_flap_out_of_plane_bottom = 4; //z direction
-    unsigned int    id_flap_out_of_plane_top = 5;
 
     //set the desired IDs for clamped boundaries and out_of_plane clamped boundaries
     //interface ID is set in the parameter file
@@ -524,15 +575,15 @@ void ElasticProblem<dim>::make_grid()
             if (cell->face(face)->at_boundary() ==  true)
             {
                 //boundaries for the interface
-                if(cell->face(face)->boundary_id () == id_flap_right
-                        || cell->face(face)->boundary_id () == id_flap_bottom
-                        || cell->face(face)->boundary_id () == id_flap_top)
+                if(cell->face(face)->boundary_id () == id_flap_short_top
+                        || cell->face(face)->boundary_id () == id_flap_long_bottom
+                        || cell->face(face)->boundary_id () == id_flap_long_top)
                 {
                     cell->face(face)->set_boundary_id(parameters.interface_mesh_id);
                     ++n_interface_faces;
                 }
                 //boundarys clamped in all directions
-                else if (cell->face(face)->boundary_id () == id_flap_left)
+                else if (cell->face(face)->boundary_id () == id_flap_short_bottom)
                 {
                     cell->face(face)->set_boundary_id(clamped_mesh_id);
                 }
