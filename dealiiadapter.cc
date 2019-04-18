@@ -75,6 +75,10 @@ void Time::declare_parameters(ParameterHandler &prm)
                           Patterns::Double(),
                           "Time step size");
 
+        prm.declare_entry("Output interval", "1",
+                          Patterns::Integer(0),
+                          "Write results every x timesteps");
+
         prm.declare_entry("theta", "0.5",
                           Patterns::Double(0,1),
                           "Time integration scheme");
@@ -89,11 +93,10 @@ void Time::parse_parameters(ParameterHandler &prm)
     {
         end_time = prm.get_double("End time");
         delta_t = prm.get_double("Time step size");
+        output_interval = prm.get_integer("Output interval");
         theta = prm.get_double("theta");
     }
     prm.leave_subsection();
-    // write outputfiles every x timesteps
-    output_interval = 10;
 }
 
 struct Materials
@@ -179,6 +182,7 @@ void FESystem::parse_parameters(ParameterHandler &prm)
 
 struct precice_configuration
 {
+    std::string scenario;
     bool        enable_precice;
     std::string config_file;
     std::string participant;
@@ -200,9 +204,12 @@ void precice_configuration::declare_parameters(ParameterHandler &prm)
 {
     prm.enter_subsection("precice configuration");
     {
+        prm.declare_entry("Scenario", "FSI3",
+                          Patterns::Selection("FSI3|PF"),
+                          "Cases: FSI3 or PF for perpendicular flap");
         prm.declare_entry("Enable precice", "true",
                           Patterns::Bool(),
-                          "Use the precice-adapte for a coupled simulation or just the solver");
+                          "Whether preCICE is used for coupling to another solver");
         prm.declare_entry("precice config-file", "precice-config.xml",
                           Patterns::Anything(),
                           "Name of the precice configuration file");
@@ -232,6 +239,7 @@ void precice_configuration::parse_parameters(ParameterHandler &prm)
 {
     prm.enter_subsection("precice configuration");
     {
+        scenario = prm.get("Scenario");
         enable_precice = prm.get_bool("Enable precice");
         config_file = prm.get("precice config-file");
         participant = prm.get("Participant");
@@ -409,14 +417,17 @@ private:
     void initialize_precice();
     void advance_precice();
     void extract_relevant_displacements(std::vector<double>& precice_displacements);
-    void apply_precice_forces(std::vector<double>& precice_forces);
     void save_old_state();
     void reload_old_state();
 
 
     Parameters::AllParameters parameters;
 
+    //grid related variables
     Triangulation<dim> triangulation;
+    unsigned int   global_refinement;
+    unsigned int   clamped_mesh_id;
+    unsigned int   out_of_plane_clamped_mesh_id;
 
     Time                      time;
     DoFHandler<dim>    dof_handler;
@@ -498,68 +509,94 @@ void ElasticProblem<dim>::make_grid()
 {
     std::cout<<"  Create mesh: "<<std::endl;
 
-    // if you like to specify a grading (every cell width)
-    //    std::vector< std::vector< double > > stepsize( dim );
-    //    std::vector<double> x_direction  (n_x);//number of cells in this direction
-    //    std::vector<double> y_direction  (n_y);//number of cells in this direction
-    //    std::vector<double> z_direction  (n_z);//number of cells in this direction
+    uint n_x, n_y, n_z;
 
-    //    //length of cells in x-direction
-    //    for (uint i=0; i<n_x; ++i)
-    //        x_direction[i]=(0.6-0.24899)/n_x;
+    Point<dim>  point_bottom;
+    Point<dim>  point_tip;
 
-    //    //length of cells in y-direction
-    //    for (uint i=0; i<n_x; ++i)
-    //        y_direction[i]=(0.21-0.19)/n_y;
+    // Boundary IDs are obtained through colorize = true
+    uint         id_flap_long_bottom;
+    uint            id_flap_long_top;
+    uint        id_flap_short_bottom;
+    uint           id_flap_short_top;
+    uint id_flap_out_of_plane_bottom;
+    uint    id_flap_out_of_plane_top;
 
-    //    //length of cells in y-direction
-    //    for (uint i=0; i<n_z; ++i)
-    //        y_direction[i]=(0.005+0.005)/n_z;
 
-    //    stepsize[0] = x_direction;
-    //    stepsize[1] = y_direction;
-    //    stepsize[2] = z_direction;
+    if (parameters.scenario == "FSI3")
+    {
+        //FSI 3
+        n_x = 30;
+        n_y = 5;
+        n_z = 1;
+        point_bottom = dim==3 ? Point<dim>(0.24899, 0.19, -0.005) : Point<dim>(0.24899, 0.19);
+        point_tip    = dim==3 ? Point<dim>(0.6, 0.21, 0.005) : Point<dim>(0.6, 0.21);
 
-    //FSI 3
-    uint n_x = 30;
-    uint n_y = 5;
-    uint n_z = 1;
+        //IDs for FSI3
+        id_flap_long_bottom = 2; //x direction
+        id_flap_long_top = 3;
+        id_flap_short_bottom = 0; //y direction
+        id_flap_short_top = 1;
+    }
+    else if(parameters.scenario == "PF")
+    {
+        //flap_perp
+        n_x = 5;
+        n_y = 30;
+        n_z = 1;
+        point_bottom = dim==3 ? Point<dim>(-0.05, 0, 0) : Point<dim>(0.24899, 0.19);
+        point_tip    = dim==3 ? Point<dim>(0.05, 1, 0.3) : Point<dim>(0.6, 0.21);
 
+        //IDs for PF
+        id_flap_long_bottom = 0; //x direction
+        id_flap_long_top = 1;
+        id_flap_short_bottom = 2; //y direction
+        id_flap_short_top = 3;
+    }
+    else
+    {
+        std::cout<<"Selected scenario is not preconfigured. Options are FSI3 and PF. "
+                <<"You might want to configure your own case in the make_grid function"
+               <<std::endl;
+    }
+
+    // same for both scenarios
+    id_flap_out_of_plane_bottom = 4; //z direction
+    id_flap_out_of_plane_top = 5;
+
+    //vector of dim values denoting the number of cells to generate in that direction
     std::vector< unsigned int > repetitions(dim);
     repetitions[0] = n_x;
     repetitions[1] = n_y;
     if ( dim==3 )
         repetitions[2] = n_z;
 
+    //Refine all cells global_refinement times
+    global_refinement = 0;
+
+
     GridGenerator::subdivided_hyper_rectangle(triangulation,
                                               repetitions,
-                                              (dim==3 ? Point<dim>(0.24899, 0.19, -0.005) : Point<dim>(0.24899, 0.19)),
-                                              (dim==3 ? Point<dim>(0.6, 0.21, 0.005) : Point<dim>(0.6, 0.21)),
-                                              true);
-
-    // flap_perp
-    //    uint n_x = 5;
-    //    uint n_y = 30;
-    //    uint n_z = 1;
-
-    //    std::vector< unsigned int > repetitions(dim);
-    //    repetitions[0] = n_x;
-    //    repetitions[1] = n_y;
-    //    repetitions[2] = n_z;
-
-    //    GridGenerator::subdivided_hyper_rectangle(triangulation,
-    //                                              repetitions,
-    //                                              (dim==3 ? Point<dim>(-0.05, 0, 0) : Point<dim>(0.24899, 0.19)),
-    //                                              (dim==3 ? Point<dim>(0.05, 1, 0.3) : Point<dim>(0.6, 0.21)),
-    //                                              true);
+                                              point_bottom,
+                                              point_tip,
+                                              /*colorize*/true);
 
     //TODO: Add refinement to parameter class
-    triangulation.refine_global(0);
+    triangulation.refine_global(global_refinement);
 
     std::cout << "\t Number of active cells:       "
               << triangulation.n_active_cells() << std::endl;
 
-    // Boundary 0 is clamped, 4 and 5 (out-of-plane) are only relevant for 3D
+    //set the desired IDs for clamped boundaries and out_of_plane clamped boundaries
+    //interface ID is set in the parameter file
+    clamped_mesh_id = 0;
+    out_of_plane_clamped_mesh_id = 4;
+
+    std::string error_message("The interface_id cannot be the same as the clamped one");
+    //The IDs must not be the same:
+    Assert(clamped_mesh_id != parameters.interface_mesh_id, ExcMessage(error_message));
+    Assert(out_of_plane_clamped_mesh_id != parameters.interface_mesh_id, ExcMessage(error_message));
+
     // count simultaniously the relevant coupling faces
     n_interface_faces = 0;
 
@@ -570,24 +607,24 @@ void ElasticProblem<dim>::make_grid()
         {
             if (cell->face(face)->at_boundary() ==  true)
             {
-                //boundarys for the interface
-                if(cell->face(face)->boundary_id () == 1
-                        || cell->face(face)->boundary_id () == 2
-                        || cell->face(face)->boundary_id () == 3)
+                //boundaries for the interface
+                if(cell->face(face)->boundary_id () == id_flap_short_top
+                        || cell->face(face)->boundary_id () == id_flap_long_bottom
+                        || cell->face(face)->boundary_id () == id_flap_long_top)
                 {
                     cell->face(face)->set_boundary_id(parameters.interface_mesh_id);
                     ++n_interface_faces;
                 }
                 //boundarys clamped in all directions
-                else if (cell->face(face)->boundary_id () == 0)
+                else if (cell->face(face)->boundary_id () == id_flap_short_bottom)
                 {
-                    cell->face(face)->set_boundary_id(0);
+                    cell->face(face)->set_boundary_id(clamped_mesh_id);
                 }
                 //boundarys clamped out-of-plane (z) direction
-                else if( cell->face(face)->boundary_id () ==4
-                         || cell->face(face)->boundary_id () ==5)
+                else if( cell->face(face)->boundary_id () == id_flap_out_of_plane_bottom
+                         || cell->face(face)->boundary_id () ==id_flap_out_of_plane_top)
                 {
-                    cell->face(face)->set_boundary_id(4);
+                    cell->face(face)->set_boundary_id(out_of_plane_clamped_mesh_id);
                 }
             }
         }
@@ -770,6 +807,7 @@ void ElasticProblem<dim>::assemble_rhs()
     std::cout<<"\t Assemble system "<<std::endl;
     system_rhs=0.0;
 
+    // quadrature formula for integration over faces (dim-1)
     QGauss<dim-1> face_quadrature_formula(parameters.quad_order);
 
     FEFaceValues<dim> fe_face_values(mapping,
@@ -874,25 +912,19 @@ void ElasticProblem<dim>::assemble_rhs()
     system_matrix=0.0;
     system_matrix.copy_from(stepping_matrix);
 
-
-    // 0 refers to the boundary_id, clamped in all directions
-
-    // 4 out-of-plane (z) for 3D
-    // TODO: Parametrize
-    //    const FEValuesExtractors::Scalar x_component(0);
-    //    const FEValuesExtractors::Scalar y_displacement(1);
-
+    // set Dirichlet BC
+    //clamped in all directions
     std::map<types::global_dof_index, double> boundary_values;
     VectorTools::interpolate_boundary_values(dof_handler,
-                                             0,
+                                             clamped_mesh_id,
                                              Functions::ZeroFunction<dim>(dim),
                                              boundary_values);
     if (dim == 3)
     {
         const FEValuesExtractors::Scalar z_component(2);
-
+        //clamped out_of_plane
         VectorTools::interpolate_boundary_values(dof_handler,
-                                                 4,
+                                                 out_of_plane_clamped_mesh_id,
                                                  Functions::ZeroFunction<dim>(dim),
                                                  boundary_values,
                                                  fe.component_mask(z_component));
@@ -978,7 +1010,10 @@ void ElasticProblem<dim>::compute_timesteps()
                       << " of " <<time.get_n_timesteps()
                       << std::endl;
 
-            save_old_state();
+            if (precice.isActionRequired(precice::constants::actionWriteIterationCheckpoint())){
+                save_old_state();
+                precice.fulfilledAction(precice::constants::actionWriteIterationCheckpoint());
+            }
 
             assemble_rhs();
 
@@ -988,7 +1023,10 @@ void ElasticProblem<dim>::compute_timesteps()
 
             advance_precice();
 
-            reload_old_state();
+            if (precice.isActionRequired(precice::constants::actionReadIterationCheckpoint())){
+                reload_old_state();
+                precice.fulfilledAction(precice::constants::actionReadIterationCheckpoint());
+            }
 
             if(precice.isTimestepComplete()
                     && time.get_timestep() % parameters.output_interval == 0)
@@ -1137,15 +1175,10 @@ void ElasticProblem<dim>::initialize_precice()
             precice.initializeData();
         }
 
-
         //Read initial readData from preCICE for the first time step
         if (precice.isReadDataAvailable())
             precice.readBlockVectorData(forces_data_id, n_interface_faces, interface_faces_ids.data(), precice_forces.data());
-
-        // this function is currently unnecessary (and wrong), since the precice forces are directly used in the assembly function
-        //    apply_precice_forces(precice_forces);
     }
-
 }
 
 template <int dim>
@@ -1162,9 +1195,6 @@ void ElasticProblem<dim>::advance_precice()
     if(precice.isReadDataAvailable())
     {
         precice.readBlockVectorData(forces_data_id, n_interface_faces, interface_faces_ids.data(), precice_forces.data());
-
-        // this function is currently unnecessary (and wrong), since the precice forces are directly used in the assembly function
-        //        apply_precice_forces(precice_forces);
     }
 }
 
@@ -1182,58 +1212,28 @@ void ElasticProblem<dim>::extract_relevant_displacements(std::vector<double>& pr
 
 }
 
-// this function just stores the force data at the respective position in the force vector,
-// which is later used in the assemble_rhs function to build the RHS
-template <int dim>
-void ElasticProblem<dim>::apply_precice_forces(std::vector<double>& precice_forces)
-{
-    forces = 0;
-    int data_iterator = 0;
-    for (auto element=coupling_dofs.begin(); element!=coupling_dofs.end(); ++element)
-    {
-        for(int jj=0; jj<dim; ++jj)
-            forces[*element + jj] = precice_forces[data_iterator * dim + jj];
-
-        ++data_iterator;
-    }
-
-}
-
 template <int dim>
 void ElasticProblem<dim>::save_old_state()
 {
     // Store current state for implict coupling
-    if (precice.isActionRequired(precice::constants::actionWriteIterationCheckpoint()))
-    {
-        old_state_velocity          = velocity;
-        old_state_old_velocity      = old_velocity;
-        old_state_displacement      = displacement;
-        old_state_old_displacement  = old_displacement;
-        old_state_old_forces        = old_forces;
-
-        precice.fulfilledAction(precice::constants::actionWriteIterationCheckpoint());
-    }
-
+    old_state_velocity          = velocity;
+    old_state_old_velocity      = old_velocity;
+    old_state_displacement      = displacement;
+    old_state_old_displacement  = old_displacement;
+    old_state_old_forces        = old_forces;
 }
 
 template <int dim>
 void ElasticProblem<dim>::reload_old_state()
 {
     // Load old state for implicit coupling
-    if (precice.isActionRequired(precice::constants::actionReadIterationCheckpoint()))
-    {
-        //TODO: Validate subcycling
-        velocity            = old_state_velocity;
-        old_velocity        = old_state_old_velocity;
-        displacement        = old_state_displacement;
-        old_displacement    = old_state_old_displacement;
-        old_forces          = old_state_old_forces;
-
-        time.restore();
-
-        precice.fulfilledAction(precice::constants::actionReadIterationCheckpoint());
-    }
-
+    velocity            = old_state_velocity;
+    old_velocity        = old_state_old_velocity;
+    displacement        = old_state_displacement;
+    old_displacement    = old_state_old_displacement;
+    old_forces          = old_state_old_forces;
+  
+    time.restore();
 }
 
 template <int dim>
