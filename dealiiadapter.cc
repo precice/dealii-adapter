@@ -2,7 +2,7 @@
    deal.II solver for linear elasto-dynamics with
    preCICE-adapter for partitiond FSI simulations
 
-   Copyright (c) 2018
+   Copyright (c) 2019
 
    Build on an extension of the step-8 tutorial program of the deal.II library
    See also the README.md
@@ -54,6 +54,7 @@ struct Time
     double delta_t;
     double end_time;
     double theta;
+    int    output_interval;
 
     static void
     declare_parameters(ParameterHandler &prm);
@@ -74,6 +75,10 @@ void Time::declare_parameters(ParameterHandler &prm)
                           Patterns::Double(),
                           "Time step size");
 
+        prm.declare_entry("Output interval", "1",
+                          Patterns::Integer(0),
+                          "Write results every x timesteps");
+
         prm.declare_entry("theta", "0.5",
                           Patterns::Double(0,1),
                           "Time integration scheme");
@@ -88,6 +93,7 @@ void Time::parse_parameters(ParameterHandler &prm)
     {
         end_time = prm.get_double("End time");
         delta_t = prm.get_double("Time step size");
+        output_interval = prm.get_integer("Output interval");
         theta = prm.get_double("theta");
     }
     prm.leave_subsection();
@@ -176,6 +182,8 @@ void FESystem::parse_parameters(ParameterHandler &prm)
 
 struct precice_configuration
 {
+    std::string scenario;
+    bool        enable_precice;
     std::string config_file;
     std::string participant;
     std::string node_mesh;
@@ -196,6 +204,12 @@ void precice_configuration::declare_parameters(ParameterHandler &prm)
 {
     prm.enter_subsection("precice configuration");
     {
+        prm.declare_entry("Scenario", "FSI3",
+                          Patterns::Selection("FSI3|PF"),
+                          "Cases: FSI3 or PF for perpendicular flap");
+        prm.declare_entry("Enable precice", "true",
+                          Patterns::Bool(),
+                          "Whether preCICE is used for coupling to another solver");
         prm.declare_entry("precice config-file", "precice-config.xml",
                           Patterns::Anything(),
                           "Name of the precice configuration file");
@@ -225,6 +239,8 @@ void precice_configuration::parse_parameters(ParameterHandler &prm)
 {
     prm.enter_subsection("precice configuration");
     {
+        scenario = prm.get("Scenario");
+        enable_precice = prm.get_bool("Enable precice");
         config_file = prm.get("precice config-file");
         participant = prm.get("Participant");
         node_mesh = prm.get("Node mesh name");
@@ -365,18 +381,22 @@ private:
     void solve();
     void update_displacement();
     void output_results(const unsigned int timestep) const;
+    void compute_timesteps();
     //precice related functions
     void initialize_precice();
     void advance_precice();
     void extract_relevant_displacements(std::vector<double>& precice_displacements);
-    void apply_precice_forces(std::vector<double>& precice_forces);
     void save_old_state();
     void reload_old_state();
 
 
     Parameters::AllParameters parameters;
 
+    //grid related variables
     Triangulation<dim> triangulation;
+    unsigned int   global_refinement;
+    unsigned int   clamped_mesh_id;
+    unsigned int   out_of_plane_clamped_mesh_id;
 
     Time                      time;
     DoFHandler<dim>    dof_handler;
@@ -399,12 +419,17 @@ private:
     Vector<double> forces;
     Vector<double> system_rhs;
 
+    bool           compute_gravity;
+    Vector<double> gravitational_force;
+    double         gravity_value;
+    int            gravity_direction;
+
     // variables for implicit coupling
     Vector<double> old_state_old_velocity;
+    Vector<double> old_state_velocity;
     Vector<double> old_state_old_displacement;
+    Vector<double> old_state_displacement;
     Vector<double> old_state_old_forces;
-    Vector<double> old_state_forces;
-
 
     //precice related initializations
     int             node_mesh_id;
@@ -422,47 +447,11 @@ private:
     std::vector<int>        interface_faces_ids;
 
 
-
     IndexSet                coupling_dofs;
 
     precice::SolverInterface         precice;
 };
 
-
-template <int dim>// to be removed
-void right_hand_side(const typename DoFHandler<dim>::active_cell_iterator &cell,
-                     const std::vector<Point<dim>> &points,
-                     std::vector<Tensor<1, dim>> &values,
-                     unsigned int boundary_id)
-{
-
-    // Assertion for the right size of the vector
-    Assert(values.size() == points.size(),
-           ExcDimensionMismatch(values.size(), points.size()));
-    Assert(dim >= 2, ExcNotImplemented());
-
-
-    for (unsigned int point_n = 0; point_n < points.size(); ++point_n)
-    {
-
-        //TODO: Parametrize
-        // x-direction=values[point_n][0]
-        values[point_n][0] = 0.0;
-
-        // y-direction=values[point_n][1]
-        for (unsigned int face = 0; face < GeometryInfo<dim>::faces_per_cell;
-             ++face)
-            if (cell->face(face)->at_boundary() == true
-                    && cell->face(face)->boundary_id() == boundary_id)
-            {  values[point_n][1] = 2*1000*-2;//2 cells (refinement) 1000 density 2 gravity
-                break;
-            }
-            else
-                values[point_n][1] = 0.0;
-
-    }
-
-}
 
 //Constructor
 template <int dim>
@@ -487,34 +476,94 @@ void ElasticProblem<dim>::make_grid()
 {
     std::cout<<"  Create mesh: "<<std::endl;
 
-    std::vector< std::vector< double > > stepsize( dim );
-    std::vector<double> x_direction  (5);//number of cells in this direction
-    std::vector<double> y_direction  (1);//number of cells in this direction
+    uint n_x, n_y, n_z;
 
-    //length of cells in x-direction
-    for (int i=0; i<5; i++)
-        x_direction[i]=(0.6-0.24899)/5;
+    Point<dim>  point_bottom;
+    Point<dim>  point_tip;
 
-    //length of cells in y-direction
-    y_direction[0]=0.02;
+    // Boundary IDs are obtained through colorize = true
+    uint         id_flap_long_bottom;
+    uint            id_flap_long_top;
+    uint        id_flap_short_bottom;
+    uint           id_flap_short_top;
+    uint id_flap_out_of_plane_bottom;
+    uint    id_flap_out_of_plane_top;
 
-    stepsize[0] = x_direction;
-    stepsize[1] = y_direction;
+
+    if (parameters.scenario == "FSI3")
+    {
+        //FSI 3
+        n_x = 30;
+        n_y = 5;
+        n_z = 1;
+        point_bottom = dim==3 ? Point<dim>(0.24899, 0.19, -0.005) : Point<dim>(0.24899, 0.19);
+        point_tip    = dim==3 ? Point<dim>(0.6, 0.21, 0.005) : Point<dim>(0.6, 0.21);
+
+        //IDs for FSI3
+        id_flap_long_bottom = 2; //x direction
+        id_flap_long_top = 3;
+        id_flap_short_bottom = 0; //y direction
+        id_flap_short_top = 1;
+    }
+    else if(parameters.scenario == "PF")
+    {
+        //flap_perp
+        n_x = 5;
+        n_y = 30;
+        n_z = 1;
+        point_bottom = dim==3 ? Point<dim>(-0.05, 0, 0) : Point<dim>(0.24899, 0.19);
+        point_tip    = dim==3 ? Point<dim>(0.05, 1, 0.3) : Point<dim>(0.6, 0.21);
+
+        //IDs for PF
+        id_flap_long_bottom = 0; //x direction
+        id_flap_long_top = 1;
+        id_flap_short_bottom = 2; //y direction
+        id_flap_short_top = 3;
+    }
+    else
+    {
+        std::cout<<"Selected scenario is not preconfigured. Options are FSI3 and PF. "
+                <<"You might want to configure your own case in the make_grid function"
+               <<std::endl;
+    }
+
+    // same for both scenarios
+    id_flap_out_of_plane_bottom = 4; //z direction
+    id_flap_out_of_plane_top = 5;
+
+    //vector of dim values denoting the number of cells to generate in that direction
+    std::vector< unsigned int > repetitions(dim);
+    repetitions[0] = n_x;
+    repetitions[1] = n_y;
+    if ( dim==3 )
+        repetitions[2] = n_z;
+
+    //Refine all cells global_refinement times
+    global_refinement = 0;
 
 
     GridGenerator::subdivided_hyper_rectangle(triangulation,
-                                              stepsize,
-                                              (dim==3 ? Point<dim>(0.24899, 0.19, 0.05) : Point<dim>(0.24899, 0.19)),
-                                              (dim==3 ? Point<dim>(0.6, 0.21, 0.05) : Point<dim>(0.6, 0.21)),
-                                              true);
+                                              repetitions,
+                                              point_bottom,
+                                              point_tip,
+                                              /*colorize*/true);
 
     //TODO: Add refinement to parameter class
-    triangulation.refine_global(1);
+    triangulation.refine_global(global_refinement);
 
     std::cout << "\t Number of active cells:       "
               << triangulation.n_active_cells() << std::endl;
 
-    // Boundary 0 is clamped, 4 and 5 (out-of-plane) are only relevant for 3D
+    //set the desired IDs for clamped boundaries and out_of_plane clamped boundaries
+    //interface ID is set in the parameter file
+    clamped_mesh_id = 0;
+    out_of_plane_clamped_mesh_id = 4;
+
+    std::string error_message("The interface_id cannot be the same as the clamped one");
+    //The IDs must not be the same:
+    Assert(clamped_mesh_id != parameters.interface_mesh_id, ExcMessage(error_message));
+    Assert(out_of_plane_clamped_mesh_id != parameters.interface_mesh_id, ExcMessage(error_message));
+
     // count simultaniously the relevant coupling faces
     n_interface_faces = 0;
 
@@ -523,13 +572,27 @@ void ElasticProblem<dim>::make_grid()
     for (; cell != endc; ++cell)
         for (unsigned int face = 0; face < GeometryInfo<dim>::faces_per_cell; ++face)
         {
-            if (cell->face(face)->at_boundary() ==  true
-                    && cell->face(face)->boundary_id ()!=0
-                    && cell->face(face)->boundary_id ()!=4
-                    && cell->face(face)->boundary_id ()!=5)
+            if (cell->face(face)->at_boundary() ==  true)
             {
-                cell->face(face)->set_boundary_id(parameters.interface_mesh_id);
-                ++n_interface_faces;
+                //boundaries for the interface
+                if(cell->face(face)->boundary_id () == id_flap_short_top
+                        || cell->face(face)->boundary_id () == id_flap_long_bottom
+                        || cell->face(face)->boundary_id () == id_flap_long_top)
+                {
+                    cell->face(face)->set_boundary_id(parameters.interface_mesh_id);
+                    ++n_interface_faces;
+                }
+                //boundarys clamped in all directions
+                else if (cell->face(face)->boundary_id () == id_flap_short_bottom)
+                {
+                    cell->face(face)->set_boundary_id(clamped_mesh_id);
+                }
+                //boundarys clamped out-of-plane (z) direction
+                else if( cell->face(face)->boundary_id () == id_flap_out_of_plane_bottom
+                         || cell->face(face)->boundary_id () ==id_flap_out_of_plane_top)
+                {
+                    cell->face(face)->set_boundary_id(out_of_plane_clamped_mesh_id);
+                }
             }
         }
 }
@@ -560,20 +623,31 @@ void ElasticProblem<dim>::setup_system()
     system_matrix.reinit(sparsity_pattern);
     stepping_matrix.reinit(sparsity_pattern);
 
-    MatrixCreator::create_mass_matrix (dof_handler, QGauss<dim>(2),
+    MatrixCreator::create_mass_matrix (MappingQGeneric<dim>(parameters.poly_degree),
+                                       dof_handler, QGauss<dim>(parameters.quad_order),
                                        mass_matrix);
     mass_matrix*=parameters.rho;
 
     old_velocity.reinit(dof_handler.n_dofs());
     velocity.reinit(dof_handler.n_dofs());
+
     old_displacement.reinit(dof_handler.n_dofs());
     displacement.reinit(dof_handler.n_dofs());
+
     system_rhs.reinit(dof_handler.n_dofs());
     old_forces.reinit(dof_handler.n_dofs());
     forces.reinit(dof_handler.n_dofs());
+
+    gravitational_force.reinit(dof_handler.n_dofs());
+
     // Loads at time 0
     // TODO: Check, if initial conditions should be set at the beginning
     old_forces=0.0;
+
+    //const value of gravity (e.g. 9.81) and its direction (x (0),y(1) or z(2))
+    compute_gravity     = false;
+    gravity_value       = -2;
+    gravity_direction   =  1;
 }
 
 
@@ -677,6 +751,20 @@ void ElasticProblem<dim>::assemble_system()
 
     hanging_node_constraints.condense(stepping_matrix);
 
+    //Calculate contribution of gravity and store them in gravitational_force
+    if (compute_gravity)
+    {
+        Vector<double> gravity_vector(dim);
+        //assign the specified values, rho * g is assumed
+        gravity_vector[gravity_direction] = parameters.rho * gravity_value;
+
+        //create a constant function object
+        Functions::ConstantFunction<dim, double> gravity_function(gravity_vector);
+
+        VectorTools::create_right_hand_side( MappingQGeneric<dim>(parameters.poly_degree),
+                                             dof_handler, QGauss<dim>(parameters.quad_order),
+                                             gravity_function, gravitational_force);
+    }
 }
 
 
@@ -686,15 +774,16 @@ void ElasticProblem<dim>::assemble_rhs()
     std::cout<<"\t Assemble system "<<std::endl;
     system_rhs=0.0;
 
-    QGauss<dim> quadrature_formula(parameters.quad_order);
+    // quadrature formula for integration over faces (dim-1)
+    QGauss<dim-1> face_quadrature_formula(parameters.quad_order);
 
-    FEValues<dim> fe_values(fe,
-                            quadrature_formula,
-                            update_values |
-                            update_quadrature_points | update_JxW_values);
+    FEFaceValues<dim> fe_face_values(fe,
+                                     face_quadrature_formula,
+                                     update_values |
+                                     update_quadrature_points | update_JxW_values);
 
-    const unsigned int dofs_per_cell = fe.dofs_per_cell;
-    const unsigned int n_q_points    = quadrature_formula.size();
+    const unsigned int dofs_per_cell    = fe.dofs_per_cell;
+    const unsigned int n_face_q_points  = face_quadrature_formula.size();
 
     Vector<double>     cell_rhs(dofs_per_cell);
 
@@ -702,13 +791,14 @@ void ElasticProblem<dim>::assemble_rhs()
 
     // In order to convert the array precice forces in a vector format
     Tensor<1, dim>      force_vector;
+    double              surface_area;
+
     // Looks for the right value to assign to the vector
     int force_iterator  = 0;
 
     for (const auto &cell : dof_handler.active_cell_iterators())
     {
         cell_rhs    = 0;
-        fe_values.reinit(cell);
 
         // Assembling the right hand side force vector
         for (unsigned int face = 0; face < GeometryInfo<dim>::faces_per_cell;
@@ -716,22 +806,28 @@ void ElasticProblem<dim>::assemble_rhs()
             if (cell->face(face)->at_boundary() == true &&
                     cell->face(face)->boundary_id() == parameters.interface_mesh_id)
             {
-                // store coupling data in a vector
+                fe_face_values.reinit(cell, face);
+
+                surface_area = cell->face(face)->measure();
+
+                // store coupling data in a traction vector
                 for(uint jj = 0; jj < dim; ++jj)
-                    force_vector[jj] = precice_forces[force_iterator * dim + jj];
+                    force_vector[jj] = precice_forces[force_iterator * dim + jj]/surface_area;
 
                 ++force_iterator;
 
-                for (unsigned int q_point = 0; q_point < n_q_points; ++q_point)
+                //TODO: pull-back
+
+                for (unsigned int face_q_point = 0; face_q_point < n_face_q_points; ++face_q_point)
                 {
                     for (unsigned int i = 0; i < dofs_per_cell; ++i)
                     {
                         const unsigned int component_i =
                                 fe.system_to_component_index(i).first;
 
-                        cell_rhs(i) += fe_values.shape_value(i, q_point) *
+                        cell_rhs(i) += fe_face_values.shape_value(i, face_q_point) *
                                 force_vector[component_i] *
-                                fe_values.JxW(q_point);
+                                fe_face_values.JxW(face_q_point);
                     }
                 }
             }
@@ -748,6 +844,10 @@ void ElasticProblem<dim>::assemble_rhs()
     // Update variables
     old_velocity=velocity;
     old_displacement=displacement;
+
+    //Add contribution of gravitational forces
+    if (compute_gravity)
+        system_rhs.add(1,gravitational_force);
 
 
     // RHS=(M-theta*(1-theta)*delta_t^2*K)*V_n - delta_t*K* D_n + delta_t*theta*F_n+1 + delta_t*(1-theta)*F_n
@@ -777,19 +877,28 @@ void ElasticProblem<dim>::assemble_rhs()
     system_matrix=0.0;
     system_matrix.copy_from(stepping_matrix);
 
-
-    // 0 refers to the boundary_id
-    // TODO: Parametrize
+    // set Dirichlet BC
+    //clamped in all directions
     std::map<types::global_dof_index, double> boundary_values;
     VectorTools::interpolate_boundary_values(dof_handler,
-                                             0,
+                                             clamped_mesh_id,
                                              Functions::ZeroFunction<dim>(dim),
                                              boundary_values);
+    if (dim == 3)
+    {
+        const FEValuesExtractors::Scalar z_component(2);
+        //clamped out_of_plane
+        VectorTools::interpolate_boundary_values(dof_handler,
+                                                 out_of_plane_clamped_mesh_id,
+                                                 Functions::ZeroFunction<dim>(dim),
+                                                 boundary_values,
+                                                 fe.component_mask(z_component));
+    }
+
     MatrixTools::apply_boundary_values(boundary_values,
                                        system_matrix,
                                        velocity,
                                        system_rhs);
-
 }
 
 template <int dim>
@@ -841,30 +950,98 @@ void ElasticProblem<dim>::output_results(const unsigned int timestep) const
     MappingQEulerian<dim> q_mapping(parameters.poly_degree, dof_handler, displacement);
     data_out.build_patches(q_mapping, parameters.poly_degree);
 
-    std::ofstream output("solution-" + std::to_string(timestep) + ".vtk");
+    std::ofstream output("dealii_output/solution-" + std::to_string(timestep) + ".vtk");
     data_out.write_vtk(output);
     std::cout<< "\t Output written to solution-" + std::to_string(timestep) + ".vtk \n" <<std::endl;
+}
+
+template <int dim>
+void ElasticProblem<dim>::compute_timesteps()
+{
+
+    if(parameters.enable_precice == true)
+    {
+        while(precice.isCouplingOngoing() &&
+              time.get_timestep() < time.get_n_timesteps())
+        {
+
+            time.increment();
+
+            std::cout << "  Time = " <<time.current()
+                      << " at timestep " << time.get_timestep()
+                      << " of " <<time.get_n_timesteps()
+                      << std::endl;
+
+            if (precice.isActionRequired(precice::constants::actionWriteIterationCheckpoint())){
+                save_old_state();
+                precice.fulfilledAction(precice::constants::actionWriteIterationCheckpoint());
+            }
+
+            assemble_rhs();
+
+            solve();
+
+            update_displacement();
+
+            advance_precice();
+
+            if (precice.isActionRequired(precice::constants::actionReadIterationCheckpoint())){
+                reload_old_state();
+                precice.fulfilledAction(precice::constants::actionReadIterationCheckpoint());
+            }
+
+            if(precice.isTimestepComplete()
+                    && time.get_timestep() % parameters.output_interval == 0)
+                output_results(time.get_timestep());
+
+        }
+
+        precice.finalize();
+    }
+    else
+        while(time.get_timestep() < time.get_n_timesteps())
+        {
+
+            time.increment();
+
+            std::cout << "  Time = " <<time.current()
+                      << " at timestep " << time.get_timestep()
+                      << " of " <<time.get_n_timesteps()
+                      << std::endl;
+
+            assemble_rhs();
+
+            solve();
+
+            update_displacement();
+
+            if( time.get_timestep() % parameters.output_interval == 0)
+                output_results(time.get_timestep());
+        }
 }
 
 template <int dim>
 void ElasticProblem<dim>::initialize_precice()
 {
 
-    // get precice specific IDs from precice
-    precice.configure(parameters.config_file);
+    if(parameters.enable_precice == true)
+    {
+        // get precice specific IDs from precice
+        precice.configure(parameters.config_file);
 
-    // Assert matching dimensions between deal.ii and precice
-    // Only valid for the current adapter setup
-    // TODO: Adapt for quasi-2D cases (#5)
-    Assert(dim == precice.getDimensions(),
-           ExcDimensionMismatch(dim, precice.getDimensions()));
+        // Assert matching dimensions between deal.ii and precice
+        // Only valid for the current adapter setup
+        // TODO: Adapt for quasi-2D cases (#5)
+        Assert(dim == precice.getDimensions(),
+               ExcDimensionMismatch(dim, precice.getDimensions()));
 
-    node_mesh_id = precice.getMeshID(parameters.node_mesh);
-    face_mesh_id = precice.getMeshID(parameters.face_mesh);
-    forces_data_id  = precice.getDataID(parameters.read_data_name, face_mesh_id);
-    displacements_data_id = precice.getDataID(parameters.write_data_name, node_mesh_id);
+        node_mesh_id = precice.getMeshID(parameters.node_mesh);
+        face_mesh_id = precice.getMeshID(parameters.face_mesh);
+        forces_data_id  = precice.getDataID(parameters.read_data_name, face_mesh_id);
+        displacements_data_id = precice.getDataID(parameters.write_data_name, node_mesh_id);
+    }
 
-
+    // Initialization is also needed for uncoupled simulation
     // get the number of interface nodes from deal.ii
     std::set<types::boundary_id> couplingBoundary;
     couplingBoundary.insert(parameters.interface_mesh_id);
@@ -880,27 +1057,20 @@ void ElasticProblem<dim>::initialize_precice()
     interface_nodes_positions.resize(dim * n_interface_nodes);
     interface_nodes_ids.resize(n_interface_nodes);
 
-
-    // get the coordinates of the interface nodes from deal.ii
-    std::map<types::global_dof_index, Point<dim>> support_points;
-    DoFTools::map_dofs_to_support_points(MappingQ1<dim>(), dof_handler, support_points);
-    // support_points contains now the coordinates of all dofs
-    // in the next step, the relevant coordinates are extracted using the extracted coupling_dofs
-    int node_position_iterator=0;
-    for (auto element=coupling_dofs.begin(); element!=coupling_dofs.end(); ++element)
-    {
-        for(int jj=0; jj<dim; ++jj)
-            interface_nodes_positions[node_position_iterator * dim + jj] = support_points[*element][jj];
-
-        ++node_position_iterator;
-    }
-
-    // pass node coordinates to precice
-    precice.setMeshVertices(node_mesh_id, n_interface_nodes, interface_nodes_positions.data(), interface_nodes_ids.data());
-
     // same for the face based mesh
     // number of coupling faces already obtained in the make_grid function
     precice_forces.resize(dim * n_interface_faces);
+
+    // set a constant value for each direction in case of an uncoupled simulation
+    if (parameters.enable_precice == false)
+        for (uint it = 0; it  < precice_forces.size()/dim; it++)
+        {
+            precice_forces[it*dim]= 0;
+            precice_forces[it*dim+1]= 0;
+            if(dim == 3)
+                precice_forces[it*dim+2]= 0;
+        }
+
     interface_faces_positions.resize(dim * n_interface_faces);
     interface_faces_ids.resize(n_interface_faces);
 
@@ -908,56 +1078,68 @@ void ElasticProblem<dim>::initialize_precice()
               << n_interface_faces << std::endl;
 
 
-    // get the coordinates of the face centers and store them in interface_faces_positions
-    typename DoFHandler<dim>::active_cell_iterator
-            cell = dof_handler.begin_active(),
-            endc = dof_handler.end();
-
-    int face_position_iterator = 0;
-    for (; cell!=endc; ++cell)
-        for (unsigned int face=0; face<GeometryInfo<dim>::faces_per_cell; ++face)
+    if(parameters.enable_precice == true)
+    {
+        // get the coordinates of the interface nodes from deal.ii
+        std::map<types::global_dof_index, Point<dim>> support_points;
+        DoFTools::map_dofs_to_support_points(MappingQ1<dim>(), dof_handler, support_points);
+        // support_points contains now the coordinates of all dofs
+        // in the next step, the relevant coordinates are extracted using the extracted coupling_dofs
+        int node_position_iterator=0;
+        for (auto element=coupling_dofs.begin(); element!=coupling_dofs.end(); ++element)
         {
-            if (cell->face(face)->at_boundary()
-                    &&
-                    (cell->face(face)->boundary_id() == parameters.interface_mesh_id))
-            {
+            for(int jj=0; jj<dim; ++jj)
+                interface_nodes_positions[node_position_iterator * dim + jj] = support_points[*element][jj];
 
-                for(int jj=0; jj<dim; ++jj)
-                    interface_faces_positions[face_position_iterator * dim + jj] = cell->face(face)->center()[jj];
-
-                //locally_owned_face_indices[coupling_face_iter]=cell->face_index(f);
-                //store the index of the coupling face
-                //this is necessary to assign the right face with the right value using multithreading
-                ++face_position_iterator;
-            }
+            ++node_position_iterator;
         }
 
+        // pass node coordinates to precice
+        precice.setMeshVertices(node_mesh_id, n_interface_nodes, interface_nodes_positions.data(), interface_nodes_ids.data());
 
-    // pass face coordinates to precice
-    precice.setMeshVertices(face_mesh_id, n_interface_faces, interface_faces_positions.data(), interface_faces_ids.data());
+        // get the coordinates of the face centers and store them in interface_faces_positions
+        typename DoFHandler<dim>::active_cell_iterator
+                cell = dof_handler.begin_active(),
+                endc = dof_handler.end();
 
-    precice.initialize();
+        int face_position_iterator = 0;
+        for (; cell!=endc; ++cell)
+            for (unsigned int face=0; face<GeometryInfo<dim>::faces_per_cell; ++face)
+            {
+                if (cell->face(face)->at_boundary()
+                        &&
+                        (cell->face(face)->boundary_id() == parameters.interface_mesh_id))
+                {
 
-    //Write initial writeData to preCICE
-    if (precice.isActionRequired(precice::constants::actionWriteInitialData()))
-    {
-        // store initial write_data for precice in precice_displacements
-        extract_relevant_displacements(precice_displacements);
+                    for(int jj=0; jj<dim; ++jj)
+                        interface_faces_positions[face_position_iterator * dim + jj] = cell->face(face)->center()[jj];
 
-        precice.writeBlockVectorData(displacements_data_id, n_interface_nodes, interface_nodes_ids.data(), precice_displacements.data());
-        precice.fulfilledAction(precice::constants::actionWriteInitialData());
+                    ++face_position_iterator;
+                }
+            }
 
-        precice.initializeData();
+
+        // pass face coordinates to precice
+        precice.setMeshVertices(face_mesh_id, n_interface_faces, interface_faces_positions.data(), interface_faces_ids.data());
+
+        precice.initialize();
+
+        //Write initial writeData to preCICE
+        if (precice.isActionRequired(precice::constants::actionWriteInitialData()))
+        {
+            // store initial write_data for precice in precice_displacements
+            extract_relevant_displacements(precice_displacements);
+
+            precice.writeBlockVectorData(displacements_data_id, n_interface_nodes, interface_nodes_ids.data(), precice_displacements.data());
+            precice.fulfilledAction(precice::constants::actionWriteInitialData());
+
+            precice.initializeData();
+        }
+
+        //Read initial readData from preCICE for the first time step
+        if (precice.isReadDataAvailable())
+            precice.readBlockVectorData(forces_data_id, n_interface_faces, interface_faces_ids.data(), precice_forces.data());
     }
-
-
-    //Read initial readData from preCICE for the first time step
-    if (precice.isReadDataAvailable())
-        precice.readBlockVectorData(forces_data_id, n_interface_faces, interface_faces_ids.data(), precice_forces.data());
-
-    // this function is currently unnecessary (and wrong), since the precice forces are directly used in the assembly function
-    //    apply_precice_forces(precice_forces);
-
 }
 
 template <int dim>
@@ -974,9 +1156,6 @@ void ElasticProblem<dim>::advance_precice()
     if(precice.isReadDataAvailable())
     {
         precice.readBlockVectorData(forces_data_id, n_interface_faces, interface_faces_ids.data(), precice_forces.data());
-
-        // this function is currently unnecessary (and wrong), since the precice forces are directly used in the assembly function
-        //        apply_precice_forces(precice_forces);
     }
 }
 
@@ -994,55 +1173,28 @@ void ElasticProblem<dim>::extract_relevant_displacements(std::vector<double>& pr
 
 }
 
-// this function just stores the force data at the respective position in the force vector,
-// which is later used in the assemble_rhs function to build the RHS
-template <int dim>
-void ElasticProblem<dim>::apply_precice_forces(std::vector<double>& precice_forces)
-{
-    forces = 0;
-    int data_iterator = 0;
-    for (auto element=coupling_dofs.begin(); element!=coupling_dofs.end(); ++element)
-    {
-        for(int jj=0; jj<dim; ++jj)
-            forces[*element + jj] = precice_forces[data_iterator * dim + jj];
-
-        ++data_iterator;
-    }
-
-}
-
 template <int dim>
 void ElasticProblem<dim>::save_old_state()
 {
     // Store current state for implict coupling
-    if (precice.isActionRequired(precice::constants::actionWriteIterationCheckpoint()))
-    {
-        old_state_old_velocity = old_velocity;
-        old_state_old_displacement = old_displacement;
-        old_state_old_forces = old_forces;
-
-        precice.fulfilledAction(precice::constants::actionWriteIterationCheckpoint());
-    }
-
+    old_state_velocity          = velocity;
+    old_state_old_velocity      = old_velocity;
+    old_state_displacement      = displacement;
+    old_state_old_displacement  = old_displacement;
+    old_state_old_forces        = old_forces;
 }
 
 template <int dim>
 void ElasticProblem<dim>::reload_old_state()
 {
     // Load old state for implicit coupling
-    if (precice.isActionRequired(precice::constants::actionReadIterationCheckpoint()))
-    {
-        velocity = old_velocity;
-        old_velocity = old_state_old_velocity;
-        displacement = old_displacement;
-        old_displacement = old_state_old_displacement;
-        old_forces = old_state_old_forces;
+    velocity            = old_state_velocity;
+    old_velocity        = old_state_old_velocity;
+    displacement        = old_state_displacement;
+    old_displacement    = old_state_old_displacement;
+    old_forces          = old_state_old_forces;
 
-        time.restore();
-
-        precice.fulfilledAction(precice::constants::actionReadIterationCheckpoint());
-    }
-
+    time.restore();
 }
 
 template <int dim>
@@ -1058,35 +1210,8 @@ void ElasticProblem<dim>::run()
 
     initialize_precice();
 
-    while(precice.isCouplingOngoing() &&
-          time.get_timestep() < time.get_n_timesteps())
-    {
+    compute_timesteps();
 
-        time.increment();
-
-        std::cout << "  Time = " <<time.current()
-                  << " at timestep " << time.get_timestep()
-                  << " of " <<time.get_n_timesteps()
-                  << std::endl;
-
-        save_old_state();
-
-        assemble_rhs();
-
-        solve();
-
-        update_displacement();
-
-        advance_precice();
-
-        reload_old_state();
-
-        if(precice.isTimestepComplete())
-            output_results(time.get_timestep());
-
-    }
-
-    precice.finalize();
 }
 } //end namespace adapter
 
@@ -1099,7 +1224,7 @@ int main()
                   << "--------------------------------------------------\n"
                   <<std::endl;
 
-        const unsigned int dim = 2;
+        const unsigned int dim = 3;
 
         adapter::ElasticProblem<dim> elastic_solver("parameters.prm");
         elastic_solver.run();
