@@ -3,7 +3,7 @@
 ##
 
 # Set the name of the project and target:
-SET(TARGET "dealiiadapter")
+SET(TARGET "coupled_elasto_dynamics")
 
 # Declare all source files the target consists of. Here, this is only
 # the one *.cc file, but as you expand your project you may wish
