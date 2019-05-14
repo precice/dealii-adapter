@@ -1,13 +1,18 @@
-/*---------------------------------------------------------------------------*\
-   deal.II solver for linear elasto-dynamics with
-   preCICE-adapter for partitiond FSI simulations
-
-   Copyright (c) 2019
-
-   Build on an extension of the step-8 tutorial program of the deal.II library
-   See also the README.md
-\*---------------------------------------------------------------------------*/
-
+/* ---------------------------------------------------------------------
+ * Copyright (c) 2018 - 2019 by the preCICE authors
+ *
+ * This file is part of the dealii-adapter for the coupling library
+ * preCICE. Parts of this program are based on deal.II tutorial programs.
+ *
+ * This adapter is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version. The full text of the license can
+ * be found in the file LICENSE in the precice/dealii-adapter repository.
+ * ---------------------------------------------------------------------
+ *
+ * Author: David Schneider 2018,2019
+ */
 #include <deal.II/base/quadrature_lib.h>
 #include <deal.II/base/function.h>
 #include <deal.II/base/tensor.h>
@@ -37,6 +42,7 @@
 #include <deal.II/fe/fe_q.h>
 #include <deal.II/fe/mapping_q_eulerian.h>
 
+// include for preCICE
 #include "precice/SolverInterface.hpp"
 
 #include <fstream>
@@ -159,7 +165,7 @@ void FESystem::declare_parameters(ParameterHandler &prm)
 {
     prm.enter_subsection("Finite element system");
     {
-        prm.declare_entry("Polynomial degree", "2",
+        prm.declare_entry("Polynomial degree", "1",
                           Patterns::Integer(0),
                           "Polynomial degree of the FE system");
 
@@ -397,11 +403,11 @@ private:
 
 
 template <int dim>
-class ElasticProblem
+class CoupledElastoDynamics
 {
 public:
-    ElasticProblem(const std::string &input_file);
-    ~ElasticProblem();
+    CoupledElastoDynamics(const std::string &input_file);
+    ~CoupledElastoDynamics();
     void run();
 
 private:
@@ -413,7 +419,7 @@ private:
     void update_displacement();
     void output_results(const unsigned int timestep) const;
     void compute_timesteps();
-    //precice related functions
+    // preCICE related functions
     void initialize_precice();
     void advance_precice();
     void extract_relevant_displacements(std::vector<double>& precice_displacements);
@@ -423,7 +429,7 @@ private:
 
     Parameters::AllParameters parameters;
 
-    //grid related variables
+    // grid related variables
     Triangulation<dim> triangulation;
     unsigned int   global_refinement;
     unsigned int   clamped_mesh_id;
@@ -463,7 +469,7 @@ private:
     Vector<double> old_state_displacement;
     Vector<double> old_state_old_forces;
 
-    //precice related initializations
+    // preCICE related initializations
     int             node_mesh_id;
     int             face_mesh_id;
     int             forces_data_id;
@@ -485,9 +491,9 @@ private:
 };
 
 
-//Constructor
+// constructor
 template <int dim>
-ElasticProblem<dim>::ElasticProblem(const std::string &input_file)
+CoupledElastoDynamics<dim>::CoupledElastoDynamics(const std::string &input_file)
     : parameters(input_file)
     , time(parameters.end_time, parameters.delta_t)
     , dof_handler(triangulation)
@@ -496,16 +502,15 @@ ElasticProblem<dim>::ElasticProblem(const std::string &input_file)
     , precice(parameters.participant,0,1)
 {}
 
-//Destructor
+// destructor
 template <int dim>
-ElasticProblem<dim>::~ElasticProblem()
+CoupledElastoDynamics<dim>::~CoupledElastoDynamics()
 {
     dof_handler.clear();
 }
 
-//This testcase refers to the CSM benchmark of Hron and Turek
 template <int dim>
-void ElasticProblem<dim>::make_grid()
+void CoupledElastoDynamics<dim>::make_grid()
 {
     std::cout<<"  Create mesh: "<<std::endl;
 
@@ -514,7 +519,7 @@ void ElasticProblem<dim>::make_grid()
     Point<dim>  point_bottom;
     Point<dim>  point_tip;
 
-    // Boundary IDs are obtained through colorize = true
+    // boundary IDs are obtained through colorize = true
     uint         id_flap_long_bottom;
     uint            id_flap_long_top;
     uint        id_flap_short_bottom;
@@ -525,14 +530,14 @@ void ElasticProblem<dim>::make_grid()
 
     if (parameters.scenario == "FSI3")
     {
-        //FSI 3
+        // FSI 3
         n_x = 30;
         n_y = 5;
         n_z = 1;
         point_bottom = dim==3 ? Point<dim>(0.24899, 0.19, -0.005) : Point<dim>(0.24899, 0.19);
         point_tip    = dim==3 ? Point<dim>(0.6, 0.21, 0.005) : Point<dim>(0.6, 0.21);
 
-        //IDs for FSI3
+        // IDs for FSI3
         id_flap_long_bottom = 2; //x direction
         id_flap_long_top = 3;
         id_flap_short_bottom = 0; //y direction
@@ -540,14 +545,14 @@ void ElasticProblem<dim>::make_grid()
     }
     else if(parameters.scenario == "PF")
     {
-        //flap_perp
+        // flap_perp
         n_x = 5;
         n_y = 30;
         n_z = 1;
-        point_bottom = dim==3 ? Point<dim>(-0.05, 0, 0) : Point<dim>(0.24899, 0.19);
-        point_tip    = dim==3 ? Point<dim>(0.05, 1, 0.3) : Point<dim>(0.6, 0.21);
+        point_bottom = dim==3 ? Point<dim>(-0.05, 0, 0) : Point<dim>(-0.05, 0);
+        point_tip    = dim==3 ? Point<dim>(0.05, 1, 0.3) : Point<dim>(0.05, 1);
 
-        //IDs for PF
+        // IDs for PF
         id_flap_long_bottom = 0; //x direction
         id_flap_long_top = 1;
         id_flap_short_bottom = 2; //y direction
@@ -564,14 +569,14 @@ void ElasticProblem<dim>::make_grid()
     id_flap_out_of_plane_bottom = 4; //z direction
     id_flap_out_of_plane_top = 5;
 
-    //vector of dim values denoting the number of cells to generate in that direction
+    // vector of dim values denoting the number of cells to generate in that direction
     std::vector< unsigned int > repetitions(dim);
     repetitions[0] = n_x;
     repetitions[1] = n_y;
     if ( dim==3 )
         repetitions[2] = n_z;
 
-    //Refine all cells global_refinement times
+    // refine all cells global_refinement times
     global_refinement = 0;
 
 
@@ -581,21 +586,21 @@ void ElasticProblem<dim>::make_grid()
                                               point_tip,
                                               /*colorize*/true);
 
-    //TODO: Add refinement to parameter class
     triangulation.refine_global(global_refinement);
 
     std::cout << "\t Number of active cells:       "
               << triangulation.n_active_cells() << std::endl;
 
-    //set the desired IDs for clamped boundaries and out_of_plane clamped boundaries
-    //interface ID is set in the parameter file
+    // set the desired IDs for clamped boundaries and out_of_plane clamped boundaries
+    // interface ID is set in the parameter file
     clamped_mesh_id = 0;
     out_of_plane_clamped_mesh_id = 4;
 
+    // the IDs must not be the same:
     std::string error_message("The interface_id cannot be the same as the clamped one");
-    //The IDs must not be the same:
     Assert(clamped_mesh_id != parameters.interface_mesh_id, ExcMessage(error_message));
     Assert(out_of_plane_clamped_mesh_id != parameters.interface_mesh_id, ExcMessage(error_message));
+
 
     // count simultaniously the relevant coupling faces
     n_interface_faces = 0;
@@ -607,7 +612,7 @@ void ElasticProblem<dim>::make_grid()
         {
             if (cell->face(face)->at_boundary() ==  true)
             {
-                //boundaries for the interface
+                // boundaries for the interface
                 if(cell->face(face)->boundary_id () == id_flap_short_top
                         || cell->face(face)->boundary_id () == id_flap_long_bottom
                         || cell->face(face)->boundary_id () == id_flap_long_top)
@@ -615,12 +620,12 @@ void ElasticProblem<dim>::make_grid()
                     cell->face(face)->set_boundary_id(parameters.interface_mesh_id);
                     ++n_interface_faces;
                 }
-                //boundarys clamped in all directions
+                // boundaries clamped in all directions
                 else if (cell->face(face)->boundary_id () == id_flap_short_bottom)
                 {
                     cell->face(face)->set_boundary_id(clamped_mesh_id);
                 }
-                //boundarys clamped out-of-plane (z) direction
+                // boundaries clamped out-of-plane (z) direction
                 else if( cell->face(face)->boundary_id () == id_flap_out_of_plane_bottom
                          || cell->face(face)->boundary_id () ==id_flap_out_of_plane_top)
                 {
@@ -631,7 +636,7 @@ void ElasticProblem<dim>::make_grid()
 }
 
 template <int dim>
-void ElasticProblem<dim>::setup_system()
+void CoupledElastoDynamics<dim>::setup_system()
 {
     std::cout<<"  Setup system: "<<std::endl;
 
@@ -673,11 +678,11 @@ void ElasticProblem<dim>::setup_system()
 
     gravitational_force.reinit(dof_handler.n_dofs());
 
-    // Loads at time 0
+    // loads at time 0
     // TODO: Check, if initial conditions should be set at the beginning
     old_forces=0.0;
 
-    //const value of gravity (e.g. 9.81) and its direction (x (0),y(1) or z(2))
+    // const value of gravity (e.g. 9.81) and its direction (x (0),y(1) or z(2))
     compute_gravity     = false;
     gravity_value       = -2;
     gravity_direction   =  1;
@@ -685,7 +690,7 @@ void ElasticProblem<dim>::setup_system()
 
 
 template <int dim>
-void ElasticProblem<dim>::assemble_system()
+void CoupledElastoDynamics<dim>::assemble_system()
 {
     QGauss<dim> quadrature_formula(parameters.quad_order);
 
@@ -716,13 +721,13 @@ void ElasticProblem<dim>::assemble_system()
 
         fe_values.reinit(cell);
 
-        // Next we get the values of the coefficients at the quadrature
+        // next we get the values of the coefficients at the quadrature
         // points.
         lambda.value_list(fe_values.get_quadrature_points(), lambda_values);
         mu.value_list(fe_values.get_quadrature_points(), mu_values);
 
 
-        // Then assemble the entries of the local stiffness matrix
+        // then assemble the entries of the local stiffness matrix
         for (unsigned int i = 0; i < dofs_per_cell; ++i)
         {
             const unsigned int component_i =
@@ -736,9 +741,8 @@ void ElasticProblem<dim>::assemble_system()
                 for (unsigned int q_point = 0; q_point < n_q_points; ++q_point)
                 {
                     cell_matrix(i, j) +=
-                            // The first term is (lambda d_i u_i, d_j v_j) + (mu d_i
+                            // the first term is (lambda d_i u_i, d_j v_j) + (mu d_i
                             // u_j, d_j v_i).
-
                             (                                                  //
                                                                                (fe_values.shape_grad(i, q_point)[component_i] * //
                                                                                 fe_values.shape_grad(j, q_point)[component_j] * //
@@ -748,9 +752,7 @@ void ElasticProblem<dim>::assemble_system()
                                                                                 fe_values.shape_grad(j, q_point)[component_i] * //
                                                                                 mu_values[q_point])                             //
                                                                                +                                                //
-                                                                               // The second term is (mu nabla u_i, nabla v_j).
-
-
+                                                                               // the second term is (mu nabla u_i, nabla v_j).
                                                                                ((component_i == component_j) ?        //
                                                                                                                       (fe_values.shape_grad(i, q_point) * //
                                                                                                                        fe_values.shape_grad(j, q_point) * //
@@ -763,7 +765,7 @@ void ElasticProblem<dim>::assemble_system()
         }
 
 
-        // The transfer from local degrees of freedom into the global matrix
+        // the transfer from local degrees of freedom into the global matrix
         cell->get_dof_indices(local_dof_indices);
         for (unsigned int i = 0; i < dofs_per_cell; ++i)
         {
@@ -788,12 +790,13 @@ void ElasticProblem<dim>::assemble_system()
     if (compute_gravity)
     {
         Vector<double> gravity_vector(dim);
-        //assign the specified values, rho * g is assumed
+        // assign the specified values, rho * g is assumed
         gravity_vector[gravity_direction] = parameters.rho * gravity_value;
 
-        //create a constant function object
+        // create a constant function object
         Functions::ConstantFunction<dim, double> gravity_function(gravity_vector);
 
+        // create the contribution to the right-hand side vector
         VectorTools::create_right_hand_side( mapping,
                                              dof_handler, QGauss<dim>(parameters.quad_order),
                                              gravity_function, gravitational_force);
@@ -802,7 +805,7 @@ void ElasticProblem<dim>::assemble_system()
 
 
 template <int dim>
-void ElasticProblem<dim>::assemble_rhs()
+void CoupledElastoDynamics<dim>::assemble_rhs()
 {
     std::cout<<"\t Assemble system "<<std::endl;
     system_rhs=0.0;
@@ -823,18 +826,19 @@ void ElasticProblem<dim>::assemble_rhs()
 
     std::vector<types::global_dof_index> local_dof_indices(dofs_per_cell);
 
-    // In order to convert the array precice forces in a vector format
-    Tensor<1, dim>      force_vector;
+    // in order to convert the array precice forces in a vector format
+    Tensor<1, dim>      spatial_force_vector;
     double              surface_area;
 
-    // Looks for the right value to assign to the vector
+    // looks for the correct value in the array obtained by preCICE
     int force_iterator  = 0;
 
     for (const auto &cell : dof_handler.active_cell_iterators())
     {
         cell_rhs    = 0;
 
-        // Assembling the right hand side force vector
+        // assembling the right-hand side force vector each timestep
+        // by applying contributions from the coupling interface
         for (unsigned int face = 0; face < GeometryInfo<dim>::faces_per_cell;
              ++face)
             if (cell->face(face)->at_boundary() == true &&
@@ -842,15 +846,17 @@ void ElasticProblem<dim>::assemble_rhs()
             {
                 fe_face_values.reinit(cell, face);
 
+                // get face area dA, in order to apply Nansons formula
                 surface_area = cell->face(face)->measure();
 
                 // store coupling data in a traction vector
+                // obtained forces are (according to OpenFOAM) measured in the deformed configuration.
+                // calculate needed traction from forces according to Nansons formula:
+                // we obtain as coupling data: t*da = f and use t_0 = t * da/dA = f/dA
                 for(uint jj = 0; jj < dim; ++jj)
-                    force_vector[jj] = precice_forces[force_iterator * dim + jj]/surface_area;
+                    spatial_force_vector[jj] = precice_forces[force_iterator * dim + jj]/surface_area;
 
                 ++force_iterator;
-
-                //TODO: pull-back
 
                 for (unsigned int face_q_point = 0; face_q_point < n_face_q_points; ++face_q_point)
                 {
@@ -860,7 +866,7 @@ void ElasticProblem<dim>::assemble_rhs()
                                 fe.system_to_component_index(i).first;
 
                         cell_rhs(i) += fe_face_values.shape_value(i, face_q_point) *
-                                force_vector[component_i] *
+                                spatial_force_vector[component_i] *
                                 fe_face_values.JxW(face_q_point);
                     }
                 }
@@ -872,19 +878,17 @@ void ElasticProblem<dim>::assemble_rhs()
         {
             system_rhs(local_dof_indices[i]) += cell_rhs(i);
         }
-
     }
 
-
-    // Update variables
+    // update variables time dependent variables
     old_velocity=velocity;
     old_displacement=displacement;
 
-    //Add contribution of gravitational forces
+    // add contribution of gravitational forces
     if (compute_gravity)
         system_rhs.add(1,gravitational_force);
 
-
+    // assemble global RHS:
     // RHS=(M-theta*(1-theta)*delta_t^2*K)*V_n - delta_t*K* D_n + delta_t*theta*F_n+1 + delta_t*(1-theta)*F_n
 
     // tmp vector to store intermediate results
@@ -908,12 +912,12 @@ void ElasticProblem<dim>::assemble_rhs()
 
     hanging_node_constraints.condense(system_rhs);
 
-    // Copy the system_matrix every timestep, since applying the BC deletes certain rows and columns
+    // copy the system_matrix every timestep, since applying the BC deletes certain rows and columns
     system_matrix=0.0;
     system_matrix.copy_from(stepping_matrix);
 
     // set Dirichlet BC
-    //clamped in all directions
+    // clamped in all directions
     std::map<types::global_dof_index, double> boundary_values;
     VectorTools::interpolate_boundary_values(dof_handler,
                                              clamped_mesh_id,
@@ -922,7 +926,7 @@ void ElasticProblem<dim>::assemble_rhs()
     if (dim == 3)
     {
         const FEValuesExtractors::Scalar z_component(2);
-        //clamped out_of_plane
+        // clamped out_of_plane
         VectorTools::interpolate_boundary_values(dof_handler,
                                                  out_of_plane_clamped_mesh_id,
                                                  Functions::ZeroFunction<dim>(dim),
@@ -937,7 +941,7 @@ void ElasticProblem<dim>::assemble_rhs()
 }
 
 template <int dim>
-void ElasticProblem<dim>::solve()
+void CoupledElastoDynamics<dim>::solve()
 {
     std::cout<<"\t CG solver: "<<std::endl;
     SolverControl solver_control(1000, 1e-12);
@@ -948,7 +952,7 @@ void ElasticProblem<dim>::solve()
 
     cg.solve(system_matrix, velocity, system_rhs, preconditioner);
 
-    //Assert divergence
+    // assert divergence
     Assert(velocity.linfty_norm()<1e4, ExcMessage("Linear system diverged"));
     std::cout<<"\t     No of iterations:\t"<<solver_control.last_step()
             <<"\n \t     Final residual:\t"<<solver_control.last_value()<<std::endl;
@@ -956,7 +960,7 @@ void ElasticProblem<dim>::solve()
 }
 
 template <int dim>
-void ElasticProblem<dim>::update_displacement()
+void CoupledElastoDynamics<dim>::update_displacement()
 {
     // D_n+1= D_n + delta_t*theta* V_n+1 + delta_t*(1-theta)* V_n
     displacement.add( time.get_delta_t() * parameters.theta, velocity);
@@ -966,8 +970,9 @@ void ElasticProblem<dim>::update_displacement()
 
 
 template <int dim>
-void ElasticProblem<dim>::output_results(const unsigned int timestep) const
-{      
+void CoupledElastoDynamics<dim>::output_results(const unsigned int timestep) const
+{
+    // compute the strains save it in the outputfiles
     StrainPostprocessor<dim> strain_u;
 
     DataOut<dim> data_out;
@@ -984,17 +989,24 @@ void ElasticProblem<dim>::output_results(const unsigned int timestep) const
 
     data_out.add_data_vector(displacement, strain_u);
 
-    //Visualize the displacements on a displaced grid
+    // visualize the displacements on a displaced grid
     MappingQEulerian<dim> q_mapping(parameters.poly_degree, dof_handler, displacement);
     data_out.build_patches(q_mapping, parameters.poly_degree);
 
+    // check, if the output directory exists
+    std::ifstream output_directory ("dealii_output");
+    Assert(output_directory, ExcMessage("Unable to find the output directory. "
+                                        "By default, this program stores result files in a directory called dealii_output. "
+                                        "This needs to be a located in the directory, where you execute this program."));
+
+    // store all files in a seperate folder calles dealii_ouput
     std::ofstream output("dealii_output/solution-" + std::to_string(timestep) + ".vtk");
     data_out.write_vtk(output);
     std::cout<< "\t Output written to solution-" + std::to_string(timestep) + ".vtk \n" <<std::endl;
 }
 
 template <int dim>
-void ElasticProblem<dim>::compute_timesteps()
+void CoupledElastoDynamics<dim>::compute_timesteps()
 {
 
     if(parameters.enable_precice == true)
@@ -1059,7 +1071,7 @@ void ElasticProblem<dim>::compute_timesteps()
 }
 
 template <int dim>
-void ElasticProblem<dim>::initialize_precice()
+void CoupledElastoDynamics<dim>::initialize_precice()
 {
 
     if(parameters.enable_precice == true)
@@ -1067,8 +1079,8 @@ void ElasticProblem<dim>::initialize_precice()
         // get precice specific IDs from precice
         precice.configure(parameters.config_file);
 
-        // Assert matching dimensions between deal.ii and precice
-        // Only valid for the current adapter setup
+        // assert matching dimensions between deal.ii and precice
+        // only valid for the current adapter setup
         // TODO: Adapt for quasi-2D cases (#5)
         Assert(dim == precice.getDimensions(),
                ExcDimensionMismatch(dim, precice.getDimensions()));
@@ -1079,7 +1091,7 @@ void ElasticProblem<dim>::initialize_precice()
         displacements_data_id = precice.getDataID(parameters.write_data_name, node_mesh_id);
     }
 
-    // Initialization is also needed for uncoupled simulation
+    // initialization is also needed for uncoupled simulation
     // get the number of interface nodes from deal.ii
     std::set<types::boundary_id> couplingBoundary;
     couplingBoundary.insert(parameters.interface_mesh_id);
@@ -1120,7 +1132,7 @@ void ElasticProblem<dim>::initialize_precice()
     {
         // get the coordinates of the interface nodes from deal.ii
         std::map<types::global_dof_index, Point<dim>> support_points;
-        //TODO: Check mapping: Maybe add the mapping object to get the coordinates of higher order shape functions
+        // TODO: Check mapping: Maybe add the mapping object to get the coordinates of higher order shape functions
         DoFTools::map_dofs_to_support_points(MappingQ1<dim>(), dof_handler, support_points);
         // support_points contains now the coordinates of all dofs
         // in the next step, the relevant coordinates are extracted using the extracted coupling_dofs
@@ -1149,7 +1161,6 @@ void ElasticProblem<dim>::initialize_precice()
                         &&
                         (cell->face(face)->boundary_id() == parameters.interface_mesh_id))
                 {
-
                     for(int jj=0; jj<dim; ++jj)
                         interface_faces_positions[face_position_iterator * dim + jj] = cell->face(face)->center()[jj];
 
@@ -1163,7 +1174,7 @@ void ElasticProblem<dim>::initialize_precice()
 
         precice.initialize();
 
-        //Write initial writeData to preCICE
+        // write initial writeData to preCICE
         if (precice.isActionRequired(precice::constants::actionWriteInitialData()))
         {
             // store initial write_data for precice in precice_displacements
@@ -1175,14 +1186,14 @@ void ElasticProblem<dim>::initialize_precice()
             precice.initializeData();
         }
 
-        //Read initial readData from preCICE for the first time step
+        // read initial readData from preCICE for the first time step
         if (precice.isReadDataAvailable())
             precice.readBlockVectorData(forces_data_id, n_interface_faces, interface_faces_ids.data(), precice_forces.data());
     }
 }
 
 template <int dim>
-void ElasticProblem<dim>::advance_precice()
+void CoupledElastoDynamics<dim>::advance_precice()
 {
     if(precice.isWriteDataRequired(time.get_delta_t()))
     {
@@ -1199,7 +1210,7 @@ void ElasticProblem<dim>::advance_precice()
 }
 
 template <int dim>
-void ElasticProblem<dim>::extract_relevant_displacements(std::vector<double>& precice_displacements)
+void CoupledElastoDynamics<dim>::extract_relevant_displacements(std::vector<double>& precice_displacements)
 {
     int data_iterator = 0;
     for (auto element=coupling_dofs.begin(); element!=coupling_dofs.end(); ++element)
@@ -1209,13 +1220,12 @@ void ElasticProblem<dim>::extract_relevant_displacements(std::vector<double>& pr
 
         ++data_iterator;
     }
-
 }
 
 template <int dim>
-void ElasticProblem<dim>::save_old_state()
+void CoupledElastoDynamics<dim>::save_old_state()
 {
-    // Store current state for implict coupling
+    // store current state for implict coupling
     old_state_velocity          = velocity;
     old_state_old_velocity      = old_velocity;
     old_state_displacement      = displacement;
@@ -1224,20 +1234,20 @@ void ElasticProblem<dim>::save_old_state()
 }
 
 template <int dim>
-void ElasticProblem<dim>::reload_old_state()
+void CoupledElastoDynamics<dim>::reload_old_state()
 {
-    // Load old state for implicit coupling
+    // load old state for implicit coupling
     velocity            = old_state_velocity;
     old_velocity        = old_state_old_velocity;
     displacement        = old_state_displacement;
     old_displacement    = old_state_old_displacement;
     old_forces          = old_state_old_forces;
-  
+
     time.restore();
 }
 
 template <int dim>
-void ElasticProblem<dim>::run()
+void CoupledElastoDynamics<dim>::run()
 {
     make_grid();
 
@@ -1252,7 +1262,7 @@ void ElasticProblem<dim>::run()
     compute_timesteps();
 
 }
-} //end namespace adapter
+} // end namespace adapter
 
 int main()
 {
@@ -1265,7 +1275,7 @@ int main()
 
         const unsigned int dim = 3;
 
-        adapter::ElasticProblem<dim> elastic_solver("parameters.prm");
+        adapter::CoupledElastoDynamics<dim> elastic_solver("parameters.prm");
         elastic_solver.run();
     }
     catch (std::exception &exc)
