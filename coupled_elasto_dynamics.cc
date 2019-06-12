@@ -997,7 +997,7 @@ void CoupledElastoDynamics<dim>::output_results(const unsigned int timestep) con
     std::ifstream output_directory ("dealii_output");
     Assert(output_directory, ExcMessage("Unable to find the output directory. "
                                         "By default, this program stores result files in a directory called dealii_output. "
-                                        "This needs to be a located in the directory, where you execute this program."));
+                                        "This needs to be located in the directory, where you execute this program."));
 
     // store all files in a seperate folder calles dealii_ouput
     std::ofstream output("dealii_output/solution-" + std::to_string(timestep) + ".vtk");
@@ -1076,7 +1076,7 @@ void CoupledElastoDynamics<dim>::initialize_precice()
 
     if(parameters.enable_precice == true)
     {
-        // get precice specific IDs from precice
+        // read the precice configuration file to configure coupling features at run-time
         precice.configure(parameters.config_file);
 
         // assert matching dimensions between deal.ii and precice
@@ -1085,6 +1085,7 @@ void CoupledElastoDynamics<dim>::initialize_precice()
         Assert(dim == precice.getDimensions(),
                ExcDimensionMismatch(dim, precice.getDimensions()));
 
+        // get precice specific IDs from precice
         node_mesh_id = precice.getMeshID(parameters.node_mesh);
         face_mesh_id = precice.getMeshID(parameters.face_mesh);
         forces_data_id  = precice.getDataID(parameters.read_data_name, face_mesh_id);
