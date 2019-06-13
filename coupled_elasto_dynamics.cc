@@ -406,7 +406,7 @@ template <int dim>
 class CoupledElastoDynamics
 {
 public:
-    CoupledElastoDynamics(const std::string &input_file);
+    CoupledElastoDynamics(const std::string &case_path);
     ~CoupledElastoDynamics();
     void run();
 
@@ -427,7 +427,8 @@ private:
     void reload_old_state();
 
 
-    Parameters::AllParameters parameters;
+    Parameters::AllParameters   parameters;
+    std::string                 case_path;
 
     // grid related variables
     Triangulation<dim> triangulation;
@@ -493,12 +494,13 @@ private:
 
 // constructor
 template <int dim>
-CoupledElastoDynamics<dim>::CoupledElastoDynamics(const std::string &input_file)
-    : parameters(input_file)
+CoupledElastoDynamics<dim>::CoupledElastoDynamics(const std::string &case_path)
+    : parameters(case_path + "parameters.prm")
     , time(parameters.end_time, parameters.delta_t)
     , dof_handler(triangulation)
     , fe(FE_Q<dim>(parameters.poly_degree), dim)
     , mapping(MappingQGeneric<dim>(parameters.poly_degree))
+    , case_path(case_path)
     , precice(parameters.participant,0,1)
 {}
 
@@ -994,13 +996,13 @@ void CoupledElastoDynamics<dim>::output_results(const unsigned int timestep) con
     data_out.build_patches(q_mapping, parameters.poly_degree);
 
     // check, if the output directory exists
-    std::ifstream output_directory ("dealii_output");
+    std::ifstream output_directory (case_path + "dealii_output");
     Assert(output_directory, ExcMessage("Unable to find the output directory. "
                                         "By default, this program stores result files in a directory called dealii_output. "
-                                        "This needs to be located in the directory, where you execute this program."));
+                                        "This needs to be located in your case directory, where the parameter file is located as well."));
 
-    // store all files in a seperate folder calles dealii_ouput
-    std::ofstream output("dealii_output/solution-" + std::to_string(timestep) + ".vtk");
+    // store all files in a seperate folder called dealii_ouput
+    std::ofstream output(case_path + "dealii_output/solution-" + std::to_string(timestep) + ".vtk");
     data_out.write_vtk(output);
     std::cout<< "\t Output written to solution-" + std::to_string(timestep) + ".vtk \n" <<std::endl;
 }
@@ -1265,7 +1267,7 @@ void CoupledElastoDynamics<dim>::run()
 }
 } // end namespace adapter
 
-int main()
+int main(int argc, char **argv)
 {
     try
     {
@@ -1276,7 +1278,17 @@ int main()
 
         const unsigned int dim = 3;
 
-        adapter::CoupledElastoDynamics<dim> elastic_solver("parameters.prm");
+        std::string parameter_file;
+        if (argc > 1)
+            parameter_file = argv[1];
+        else
+            parameter_file = "parameters.prm";
+
+        // Extract path for the output directory for the output directory
+        size_t pos = parameter_file.find_last_of("/");
+        std::string case_path = std::string::npos == pos ? "" : parameter_file.substr(0, pos+1);
+
+        adapter::CoupledElastoDynamics<dim> elastic_solver(case_path);
         elastic_solver.run();
     }
     catch (std::exception &exc)
