@@ -428,7 +428,6 @@ private:
 
 
     Parameters::AllParameters   parameters;
-    std::string                 case_path;
 
     // grid related variables
     Triangulation<dim> triangulation;
@@ -471,24 +470,28 @@ private:
     Vector<double> old_state_old_forces;
 
     // preCICE related initializations
-    int             node_mesh_id;
-    int             face_mesh_id;
-    int             forces_data_id;
-    int             displacements_data_id;
-    int             n_interface_nodes;
-    int             n_interface_faces;
+    int            node_mesh_id;
+    int            face_mesh_id;
+    int            forces_data_id;
+    int            displacements_data_id;
+    int            n_interface_nodes;
+    int            n_interface_faces;
 
-    std::vector<double>     precice_forces;
-    std::vector<double>     precice_displacements;
-    std::vector<double>     interface_nodes_positions;
-    std::vector<int>        interface_nodes_ids;
-    std::vector<double>     interface_faces_positions;
-    std::vector<int>        interface_faces_ids;
+    std::vector<double>      precice_forces;
+    std::vector<double>      precice_displacements;
+    std::vector<double>      interface_nodes_positions;
+    std::vector<int>         interface_nodes_ids;
+    std::vector<double>      interface_faces_positions;
+    std::vector<int>         interface_faces_ids;
 
 
-    IndexSet                coupling_dofs;
+    IndexSet                 coupling_dofs;
 
-    precice::SolverInterface         precice;
+    // preCICE API
+    precice::SolverInterface precice;
+
+    // for the output directory
+    std::string              case_path;
 };
 
 
@@ -500,8 +503,8 @@ CoupledElastoDynamics<dim>::CoupledElastoDynamics(const std::string &case_path)
     , dof_handler(triangulation)
     , fe(FE_Q<dim>(parameters.poly_degree), dim)
     , mapping(MappingQGeneric<dim>(parameters.poly_degree))
-    , case_path(case_path)
     , precice(parameters.participant,0,1)
+    , case_path(case_path)
 {}
 
 // destructor
