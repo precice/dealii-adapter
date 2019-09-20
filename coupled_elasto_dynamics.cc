@@ -1279,19 +1279,17 @@ int main(int argc, char **argv)
                   << "--------------------------------------------------\n"
                   <<std::endl;
 
-        const unsigned int dim = 3;
-
         std::string parameter_file;
         if (argc > 1)
             parameter_file = argv[1];
         else
             parameter_file = "parameters.prm";
 
-        // Extract path for the output directory for the output directory
+        // Extract case path for the output directory 
         size_t pos = parameter_file.find_last_of("/");
         std::string case_path = std::string::npos == pos ? "" : parameter_file.substr(0, pos+1);
 
-        adapter::CoupledElastoDynamics<dim> elastic_solver(case_path);
+        adapter::CoupledElastoDynamics<DIM> elastic_solver(case_path);
         elastic_solver.run();
     }
     catch (std::exception &exc)
