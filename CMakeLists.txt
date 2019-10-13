@@ -5,6 +5,11 @@
 # Set the name of the project and target:
 SET(TARGET "coupled_elasto_dynamics")
 
+IF (NOT DEFINED DIM)
+	SET(DIM 2)
+ENDIF()
+ADD_DEFINITIONS(-DDIM=${DIM})
+
 # Declare all source files the target consists of. Here, this is only
 # the one *.cc file, but as you expand your project you may wish
 # to add other source files as well. If your project becomes much larger,
@@ -18,7 +23,6 @@ SET(TARGET "coupled_elasto_dynamics")
 SET(TARGET_SRC
   ${TARGET}.cc
   )
-
 # Usually, you will not need to modify anything beyond this point...
 
 CMAKE_MINIMUM_REQUIRED(VERSION 2.8.12)
