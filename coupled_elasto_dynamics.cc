@@ -1029,7 +1029,7 @@ void CoupledElastoDynamics<dim>::compute_timesteps()
 
             if (precice.isActionRequired(precice::constants::actionWriteIterationCheckpoint())){
                 save_old_state();
-                precice.fulfilledAction(precice::constants::actionWriteIterationCheckpoint());
+                precice.markActionFulfilled(precice::constants::actionWriteIterationCheckpoint());
             }
 
             assemble_rhs();
@@ -1042,10 +1042,10 @@ void CoupledElastoDynamics<dim>::compute_timesteps()
 
             if (precice.isActionRequired(precice::constants::actionReadIterationCheckpoint())){
                 reload_old_state();
-                precice.fulfilledAction(precice::constants::actionReadIterationCheckpoint());
+                precice.markActionFulfilled(precice::constants::actionReadIterationCheckpoint());
             }
 
-            if(precice.isTimestepComplete()
+            if(precice.isTimeWindowComplete()
                     && time.get_timestep() % parameters.output_interval == 0)
                 output_results(time.get_timestep());
 
@@ -1184,7 +1184,7 @@ void CoupledElastoDynamics<dim>::initialize_precice()
             extract_relevant_displacements(precice_displacements);
 
             precice.writeBlockVectorData(displacements_data_id, n_interface_nodes, interface_nodes_ids.data(), precice_displacements.data());
-            precice.fulfilledAction(precice::constants::actionWriteInitialData());
+            precice.markActionFulfilled(precice::constants::actionWriteInitialData());
 
             precice.initializeData();
         }
