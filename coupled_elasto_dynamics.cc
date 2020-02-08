@@ -503,7 +503,7 @@ CoupledElastoDynamics<dim>::CoupledElastoDynamics(const std::string &case_path)
     , dof_handler(triangulation)
     , fe(FE_Q<dim>(parameters.poly_degree), dim)
     , mapping(MappingQGeneric<dim>(parameters.poly_degree))
-    , precice(parameters.participant,0,1)
+    , precice(parameters.participant,parameters.config_file,0,1)
     , case_path(case_path)
 {}
 
@@ -1029,7 +1029,7 @@ void CoupledElastoDynamics<dim>::compute_timesteps()
 
             if (precice.isActionRequired(precice::constants::actionWriteIterationCheckpoint())){
                 save_old_state();
-                precice.fulfilledAction(precice::constants::actionWriteIterationCheckpoint());
+                precice.markActionFulfilled(precice::constants::actionWriteIterationCheckpoint());
             }
 
             assemble_rhs();
@@ -1042,10 +1042,10 @@ void CoupledElastoDynamics<dim>::compute_timesteps()
 
             if (precice.isActionRequired(precice::constants::actionReadIterationCheckpoint())){
                 reload_old_state();
-                precice.fulfilledAction(precice::constants::actionReadIterationCheckpoint());
+                precice.markActionFulfilled(precice::constants::actionReadIterationCheckpoint());
             }
 
-            if(precice.isTimestepComplete()
+            if(precice.isTimeWindowComplete()
                     && time.get_timestep() % parameters.output_interval == 0)
                 output_results(time.get_timestep());
 
@@ -1081,9 +1081,6 @@ void CoupledElastoDynamics<dim>::initialize_precice()
 
     if(parameters.enable_precice == true)
     {
-        // read the precice configuration file to configure coupling features at run-time
-        precice.configure(parameters.config_file);
-
         // assert matching dimensions between deal.ii and precice
         // only valid for the current adapter setup
         // TODO: Adapt for quasi-2D cases (#5)
@@ -1187,7 +1184,7 @@ void CoupledElastoDynamics<dim>::initialize_precice()
             extract_relevant_displacements(precice_displacements);
 
             precice.writeBlockVectorData(displacements_data_id, n_interface_nodes, interface_nodes_ids.data(), precice_displacements.data());
-            precice.fulfilledAction(precice::constants::actionWriteInitialData());
+            precice.markActionFulfilled(precice::constants::actionWriteInitialData());
 
             precice.initializeData();
         }
