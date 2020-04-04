@@ -2,6 +2,14 @@
 # Dimensional quantities are in SI units
 # --------------------------------------
 
+subsection Finite element system
+    # Polynomial degree of the FE system
+    set Polynomial degree   = 1
+
+    # Gauss quadrature order
+    set Quadrature order    = 3
+end
+
 subsection Linear solver
   # Linear solver iterations (multiples of the system matrix size)
   set Max iteration multiplier  = 1
