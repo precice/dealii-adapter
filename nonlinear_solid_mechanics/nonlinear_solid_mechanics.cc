@@ -699,9 +699,6 @@ namespace adapter
 
     void
     print_conv_footer();
-
-    void
-    print_vertical_tip_displacement();
   };
 
 
@@ -755,7 +752,6 @@ namespace adapter
         time.increment();
       }
 
-    print_vertical_tip_displacement();
 
 
     //        Timer        timer;
@@ -784,46 +780,42 @@ namespace adapter
   }
 
 
-  template <int dim>
-  Point<dim>
-  grid_y_transform(const Point<dim> &pt_in)
-  {
-    const double &x = pt_in[0];
-    const double &y = pt_in[1];
-
-    const double y_upper =
-      44.0 + (16.0 / 48.0) * x; // Line defining upper edge of beam
-    const double y_lower =
-      0.0 + (44.0 / 48.0) * x;     // Line defining lower edge of beam
-    const double theta = y / 44.0; // Fraction of height along left side of beam
-    const double y_transform =
-      (1 - theta) * y_lower + theta * y_upper; // Final transformation
-
-    Point<dim> pt_out = pt_in;
-    pt_out[1]         = y_transform;
-
-    return pt_out;
-  }
 
   template <int dim, typename NumberType>
   void
   Solid<dim, NumberType>::make_grid()
   {
-    std::vector<unsigned int> repetitions(dim, 32);
-    if (dim == 3)
-      repetitions[dim - 1] = 1;
+    const Point<dim> point_bottom =
+      dim == 3 ? Point<dim>(0.24899, 0.19, -0.005) : Point<dim>(0.24899, 0.19);
+    const Point<dim> point_tip = dim == 3 ? Point<dim>(0.6, 0.21, 0.005) : Point<dim>(0.6, 0.21);
 
-    const Point<dim> bottom_left =
-      (dim == 3 ? Point<dim>(0.0, 0.0, -0.5) : Point<dim>(0.0, 0.0));
-    const Point<dim> top_right =
-      (dim == 3 ? Point<dim>(48.0, 44.0, 0.5) : Point<dim>(48.0, 44.0));
+    // IDs for FSI3/CSM2
+    const unsigned int id_flap_long_bottom  = 2; // x direction
+    const unsigned int id_flap_long_top     = 3;
+    const unsigned int id_flap_short_bottom = 0; // y direction
+    const unsigned int id_flap_short_top    = 1;
+
+    const unsigned int        n_x = 25;
+    const unsigned int        n_y = 2;
+    std::vector<unsigned int> repetitions({n_x, n_y});
 
     GridGenerator::subdivided_hyper_rectangle(triangulation,
                                               repetitions,
-                                              bottom_left,
-                                              top_right);
+                                              point_bottom,
+                                              point_tip,
+                                              /*colorize*/ true);
 
-    const double                                      tol_boundary = 1e-6;
+
+    // refine all cells global_refinement times
+    const unsigned int global_refinement = 1;
+    triangulation.refine_global(global_refinement);
+
+
+    // Cell iterator for boundary conditions
+    const unsigned int clamped_boundary_id    = 1;
+    const unsigned int do_nothing_boundary_id = 2;
+    //    const unsigned int neumann_boundary_id    = 11;
+
     typename Triangulation<dim>::active_cell_iterator cell = triangulation
                                                                .begin_active(),
                                                       endc =
@@ -833,19 +825,18 @@ namespace adapter
            ++face)
         if (cell->face(face)->at_boundary() == true)
           {
-            if (std::abs(cell->face(face)->center()[0] - 0.0) < tol_boundary)
-              cell->face(face)->set_boundary_id(1); // -X faces
-            else if (std::abs(cell->face(face)->center()[0] - 48.0) <
-                     tol_boundary)
-              cell->face(face)->set_boundary_id(11); // +X faces
-            else if (std::abs(std::abs(cell->face(face)->center()[0]) - 0.5) <
-                     tol_boundary)
-              cell->face(face)->set_boundary_id(2); // +Z and -Z faces
+            if (cell->face(face)->boundary_id() == id_flap_short_bottom)
+              cell->face(face)->set_boundary_id(clamped_boundary_id);
+            else if (cell->face(face)->boundary_id() == id_flap_short_top ||
+                     cell->face(face)->boundary_id() == id_flap_long_bottom ||
+                     cell->face(face)->boundary_id() == id_flap_long_top)
+              cell->face(face)->set_boundary_id(do_nothing_boundary_id);
+            else
+              AssertThrow(false,
+                          ExcMessage("Unknown boundary id, did "
+                                     "you set a boundary "
+                                     "condition?"))
           }
-
-    GridTools::transform(&grid_y_transform<dim>, triangulation);
-
-    GridTools::scale(1e-3, triangulation);
 
     vol_reference = GridTools::volume(triangulation);
     vol_current   = vol_reference;
@@ -1052,11 +1043,6 @@ namespace adapter
               << "v / V_0:\t" << vol_current << " / " << vol_reference
               << std::endl;
   }
-
-  template <int dim, typename NumberType>
-  void
-  Solid<dim, NumberType>::print_vertical_tip_displacement()
-  {}
 
 
 
