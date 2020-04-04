@@ -787,7 +787,8 @@ namespace adapter
   {
     const Point<dim> point_bottom =
       dim == 3 ? Point<dim>(0.24899, 0.19, -0.005) : Point<dim>(0.24899, 0.19);
-    const Point<dim> point_tip = dim == 3 ? Point<dim>(0.6, 0.21, 0.005) : Point<dim>(0.6, 0.21);
+    const Point<dim> point_tip =
+      dim == 3 ? Point<dim>(0.6, 0.21, 0.005) : Point<dim>(0.6, 0.21);
 
     // IDs for FSI3/CSM2
     const unsigned int id_flap_long_bottom  = 2; // x direction
@@ -1003,12 +1004,6 @@ namespace adapter
   {
     static const unsigned int l_width = 87;
 
-    //    pcout << "--------------------------------------------------\n"
-    //          << "             Running deal.ii solver \n"
-    //          << "--------------------------------------------------\n"
-    //          << std::endl;
-
-
     for (unsigned int i = 0; i < l_width; ++i)
       std::cout << "_";
     std::cout << std::endl;
@@ -1131,6 +1126,8 @@ namespace adapter
       std::vector<std::vector<SymmetricTensor<2, dim, NumberType>>>
         symm_grad_Nx;
 
+      std::vector<std::vector<Tensor<1, dim, NumberType>>> shape_value;
+
       ScratchData_ASM(const FiniteElement<dim> & fe_cell,
                       const QGauss<dim> &        qf_cell,
                       const UpdateFlags          uf_cell,
@@ -1147,6 +1144,9 @@ namespace adapter
         , symm_grad_Nx(qf_cell.size(),
                        std::vector<SymmetricTensor<2, dim, NumberType>>(
                          fe_cell.dofs_per_cell))
+        , shape_value(qf_cell.size(),
+                      std::vector<Tensor<1, dim, NumberType>>(
+                        fe_cell.dofs_per_cell))
       {}
 
       ScratchData_ASM(const ScratchData_ASM &rhs)
@@ -1160,6 +1160,7 @@ namespace adapter
                              rhs.fe_face_values_ref.get_update_flags())
         , grad_Nx(rhs.grad_Nx)
         , symm_grad_Nx(rhs.symm_grad_Nx)
+        , shape_value(rhs.shape_value)
       {}
 
       void
@@ -1180,6 +1181,7 @@ namespace adapter
                 grad_Nx[q_point][k] = Tensor<2, dim, NumberType>();
                 symm_grad_Nx[q_point][k] =
                   SymmetricTensor<2, dim, NumberType>();
+                shape_value[q_point][k] = Tensor<1, dim, NumberType>();
               }
           }
       }
@@ -1311,6 +1313,7 @@ namespace adapter
 
       for (unsigned int q_point = 0; q_point < n_q_points; ++q_point)
         {
+          // Get kinematic variables
           const Tensor<2, dim, NumberType> &grad_u =
             scratch.solution_grads_u_total[q_point];
           const Tensor<2, dim, NumberType> F =
@@ -1323,6 +1326,8 @@ namespace adapter
           const Tensor<2, dim, NumberType> F_inv = invert(F);
           Assert(det_F > NumberType(0.0), ExcInternalError());
 
+
+          // Update scratch data
           for (unsigned int k = 0; k < dofs_per_cell; ++k)
             {
               const unsigned int k_group =
@@ -1334,21 +1339,33 @@ namespace adapter
                     scratch.fe_values_ref[u_fe].gradient(k, q_point) * F_inv;
                   scratch.symm_grad_Nx[q_point][k] =
                     symmetrize(scratch.grad_Nx[q_point][k]);
+                  scratch.shape_value[q_point][k] =
+                    scratch.fe_values_ref[u_fe].value(k, q_point);
                 }
               else
                 Assert(k_group <= u_dof, ExcInternalError());
             }
 
+          // Get material contributions
           const SymmetricTensor<2, dim, NumberType> tau =
             lqph[q_point]->get_tau(det_F, b_bar);
           const SymmetricTensor<4, dim, NumberType> Jc =
             lqph[q_point]->get_Jc(det_F, b_bar);
           const Tensor<2, dim, NumberType> tau_ns(tau);
 
+          // Aliases for readability
           const std::vector<SymmetricTensor<2, dim>> &symm_grad_Nx =
             scratch.symm_grad_Nx[q_point];
           const std::vector<Tensor<2, dim>> &grad_Nx = scratch.grad_Nx[q_point];
           const double JxW = scratch.fe_values_ref.JxW(q_point);
+          const std::vector<Tensor<1, dim, NumberType>> &shape_value =
+            scratch.shape_value[q_point];
+
+          const double rho = 1000.;
+
+          // Define const force vector for gravity
+          const Tensor<1, dim> body_force({0, rho * -2.});
+
 
           for (unsigned int i = 0; i < dofs_per_cell; ++i)
             {
@@ -1357,8 +1374,14 @@ namespace adapter
               const unsigned int i_group =
                 fe.system_to_base_index(i).first.first;
 
+              // Residual assembly
+              // Add body force contribution
               if (i_group == u_dof)
-                data.cell_rhs(i) -= (symm_grad_Nx[i] * tau) * JxW;
+                data.cell_rhs(i) -=
+                  ((symm_grad_Nx[i] * tau) -
+                   (body_force[component_i] *
+                    scratch.fe_values_ref.shape_value(i, q_point))) *
+                  JxW;
               else
                 Assert(i_group <= u_dof, ExcInternalError());
 
@@ -1406,7 +1429,8 @@ namespace adapter
     tangent_matrix = 0.0;
     system_rhs     = 0.0;
 
-    const UpdateFlags uf_cell(update_gradients | update_JxW_values);
+    const UpdateFlags uf_cell(update_values | update_gradients |
+                              update_JxW_values);
     const UpdateFlags uf_face(update_values | update_JxW_values);
 
     const BlockVector<double> solution_total(

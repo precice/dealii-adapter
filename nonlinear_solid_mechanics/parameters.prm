@@ -30,10 +30,10 @@ end
 
 subsection Material properties
   # Poisson's ratio
-  set Poisson's ratio = 0.3
+  set Poisson's ratio = 0.4
 
   # Shear modulus
-  set Shear modulus   = 0.4225e6
+  set Shear modulus   = 0.5e6
 end
 
 
