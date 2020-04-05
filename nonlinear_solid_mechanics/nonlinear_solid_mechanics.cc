@@ -120,6 +120,7 @@ namespace adapter
     {
       double nu;
       double mu;
+      double rho;
 
       static void
       declare_parameters(ParameterHandler &prm);
@@ -142,6 +143,8 @@ namespace adapter
                           "0.4225e6",
                           Patterns::Double(),
                           "Shear modulus");
+
+        prm.declare_entry("rho", "1000", Patterns::Double(), "rho");
       }
       prm.leave_subsection();
     }
@@ -151,8 +154,9 @@ namespace adapter
     {
       prm.enter_subsection("Material properties");
       {
-        nu = prm.get_double("Poisson's ratio");
-        mu = prm.get_double("Shear modulus");
+        nu  = prm.get_double("Poisson's ratio");
+        mu  = prm.get_double("Shear modulus");
+        rho = prm.get_double("rho");
       }
       prm.leave_subsection();
     }
@@ -275,6 +279,7 @@ namespace adapter
     {
       double delta_t;
       double end_time;
+      int    output_interval;
 
       static void
       declare_parameters(ParameterHandler &prm);
@@ -294,6 +299,11 @@ namespace adapter
                           "0.1",
                           Patterns::Double(),
                           "Time step size");
+
+        prm.declare_entry("Output interval",
+                          "1",
+                          Patterns::Integer(),
+                          "Output interval");
       }
       prm.leave_subsection();
     }
@@ -303,8 +313,9 @@ namespace adapter
     {
       prm.enter_subsection("Time");
       {
-        end_time = prm.get_double("End time");
-        delta_t  = prm.get_double("Time step size");
+        end_time        = prm.get_double("End time");
+        delta_t         = prm.get_double("Time step size");
+        output_interval = prm.get_integer("Output interval");
       }
       prm.leave_subsection();
     }
@@ -332,6 +343,10 @@ namespace adapter
       declare_parameters(prm);
       prm.parse_input(input_file);
       parse_parameters(prm);
+
+      // Optional, if we want to print all parameters in the beginning of the
+      // simulation
+      //      prm.print_parameters(std::cout,ParameterHandler::Text);
     }
 
     void
@@ -409,9 +424,12 @@ namespace adapter
   class Material_Compressible_Neo_Hook_One_Field
   {
   public:
-    Material_Compressible_Neo_Hook_One_Field(const double mu, const double nu)
+    Material_Compressible_Neo_Hook_One_Field(const double mu,
+                                             const double nu,
+                                             const double rho)
       : kappa((2.0 * mu * (1.0 + nu)) / (3.0 * (1.0 - 2.0 * nu)))
       , c_1(mu / 2.0)
+      , rho(rho)
     {
       Assert(kappa > 0, ExcInternalError());
     }
@@ -440,9 +458,16 @@ namespace adapter
       return get_Jc_vol(det_F) + get_Jc_iso(b_bar);
     }
 
+    NumberType
+    get_rho() const
+    {
+      return rho;
+    }
+
   private:
     const double kappa;
     const double c_1;
+    const double rho;
 
     NumberType
     get_Psi_vol(const NumberType &det_F) const
@@ -539,7 +564,7 @@ namespace adapter
     {
       material.reset(
         new Material_Compressible_Neo_Hook_One_Field<dim, NumberType>(
-          parameters.mu, parameters.nu));
+          parameters.mu, parameters.nu, parameters.rho));
     }
 
     NumberType
@@ -561,6 +586,12 @@ namespace adapter
            const SymmetricTensor<2, dim, NumberType> &b_bar) const
     {
       return material->get_Jc(det_F, b_bar);
+    }
+
+    NumberType
+    get_rho() const
+    {
+      return material->get_rho();
     }
 
   private:
@@ -740,7 +771,7 @@ namespace adapter
     output_results();
     time.increment();
 
-    BlockVector<double> solution_delta(dofs_per_block);
+    BlockVector<NumberType> solution_delta(dofs_per_block);
     while (time.current() <= time.end())
       {
         solution_delta = 0.0;
@@ -751,32 +782,6 @@ namespace adapter
         output_results();
         time.increment();
       }
-
-
-
-    //        Timer        timer;
-    //        double       wtime           = 0;
-    //        double       output_time     = 0;
-    //        unsigned int timestep_number = 1;
-
-    //        while (timestep_number < n_timesteps)
-    //          {
-    //            timer.restart();
-    //            ++timestep_number;
-
-    //            // solve newton_it
-
-    //            time += delta_t;
-
-    //            wtime += timer.wall_time();
-
-    //            timer.restart();
-
-    //            if (timestep_number % output_interval == 0)
-    //              output_results(timestep_number);
-
-    //            output_time += timer.wall_time();
-    //          }
   }
 
 
@@ -954,6 +959,7 @@ namespace adapter
         make_constraints(newton_iteration);
         assemble_system(solution_delta);
 
+        // Residual error = rhs error
         get_error_residual(error_residual);
 
         if (newton_iteration == 0)
@@ -962,8 +968,12 @@ namespace adapter
         error_residual_norm = error_residual;
         error_residual_norm.normalise(error_residual_0);
 
-        if (newton_iteration > 0 && error_update_norm.u <= parameters.tol_u &&
-            error_residual_norm.u <= parameters.tol_f)
+        // Check absolute errors for dynamic cases as well, since there might be
+        // situations, with small or even no deformations in coupled setups
+        if (newton_iteration > 0 &&
+              (error_update_norm.u <= parameters.tol_u &&
+               error_residual_norm.u <= parameters.tol_f) ||
+            (error_update.u <= 1e-15 && error_residual.u <= 5e-9))
           {
             std::cout << " CONVERGED! " << std::endl;
             print_conv_footer();
@@ -974,6 +984,12 @@ namespace adapter
         const std::pair<unsigned int, double> lin_solver_output =
           solve_linear_system(newton_update);
 
+        // Update error = displacement error
+        // TODO: Distinction between .u and .norm is a relic of step-44, where
+        // .norm refers to the three field error and .u only to the displacement
+        // block. Here, there is only a displacement block and they are
+        // equivalent. So, remove one and print absolute residuals in the
+        // conv_header
         get_error_update(newton_update, error_update);
         if (newton_iteration == 0)
           error_update_0 = error_update;
@@ -985,14 +1001,13 @@ namespace adapter
 
         std::cout << " | " << std::fixed << std::setprecision(3) << std::setw(7)
                   << std::scientific << lin_solver_output.first << "  "
-                  << lin_solver_output.second << "  "
-                  << error_residual_norm.norm << "  " << error_residual_norm.u
-                  << "  "
-                  << "  " << error_update_norm.norm << "  "
-                  << error_update_norm.u << "  " << std::endl;
+                  << lin_solver_output.second << "  " << error_residual_norm.u
+                  << "  " << error_residual.u << "  "
+                  << "  " << error_update_norm.u << "  " << error_update.u
+                  << "  " << std::endl;
       }
 
-    AssertThrow(newton_iteration <= parameters.max_iterations_NR,
+    AssertThrow(newton_iteration < parameters.max_iterations_NR,
                 ExcMessage("No convergence in nonlinear solver!"));
   }
 
@@ -1311,6 +1326,9 @@ namespace adapter
       scratch.fe_values_ref[u_fe].get_function_gradients(
         scratch.solution_total, scratch.solution_grads_u_total);
 
+      // Const in the whole domain, so we call it once for each cell
+      const double rho = lqph[0]->get_rho();
+
       for (unsigned int q_point = 0; q_point < n_q_points; ++q_point)
         {
           // Get kinematic variables
@@ -1353,15 +1371,15 @@ namespace adapter
             lqph[q_point]->get_Jc(det_F, b_bar);
           const Tensor<2, dim, NumberType> tau_ns(tau);
 
+
           // Aliases for readability
           const std::vector<SymmetricTensor<2, dim>> &symm_grad_Nx =
             scratch.symm_grad_Nx[q_point];
           const std::vector<Tensor<2, dim>> &grad_Nx = scratch.grad_Nx[q_point];
           const double JxW = scratch.fe_values_ref.JxW(q_point);
-          const std::vector<Tensor<1, dim, NumberType>> &shape_value =
-            scratch.shape_value[q_point];
-
-          const double rho = 1000.;
+          //          const std::vector<Tensor<1, dim, NumberType>> &shape_value
+          //          =
+          //            scratch.shape_value[q_point];
 
           // Define const force vector for gravity
           const Tensor<1, dim> body_force({0, rho * -2.});

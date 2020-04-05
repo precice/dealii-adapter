@@ -2,12 +2,34 @@
 # Dimensional quantities are in SI units
 # --------------------------------------
 
-subsection Finite element system
-    # Polynomial degree of the FE system
-    set Polynomial degree   = 1
+subsection Time
+  # End time
+  set End time        = 1
 
-    # Gauss quadrature order
-    set Quadrature order    = 3
+  # Time step size
+  set Time step size  = 0.1
+
+  # Output interval
+  set Output interval = 1
+end
+
+subsection Material properties
+  # Poisson's ratio
+  set Poisson's ratio = 0.4
+
+  # Shear modulus
+  set Shear modulus   = 0.5e6
+
+  # Density
+  set rho	      = 1000
+end
+
+subsection Finite element system
+  # Polynomial degree of the FE system
+  set Polynomial degree   = 1
+
+  # Gauss quadrature order
+  set Quadrature order    = 3
 end
 
 subsection Linear solver
@@ -18,24 +40,14 @@ subsection Linear solver
   set Residual                  = 1e-6
 
   # Preconditioner type
-  set Preconditioner type        = ssor
+  set Preconditioner type       = ssor
 
   # Preconditioner relaxation value
-  set Preconditioner relaxation  = 0.65
+  set Preconditioner relaxation = 0.65
 
   # Type of solver used to solve the linear system
   set Solver type               = CG
 end
-
-
-subsection Material properties
-  # Poisson's ratio
-  set Poisson's ratio = 0.4
-
-  # Shear modulus
-  set Shear modulus   = 0.5e6
-end
-
 
 subsection Nonlinear solver
   # Number of Newton-Raphson iterations allowed
@@ -46,13 +58,4 @@ subsection Nonlinear solver
 
   # Force residual tolerance
   set Tolerance force               = 1.0e-9
-end
-
-
-subsection Time
-  # End time
-  set End time       = 1
-
-  # Time step size
-  set Time step size = 0.1
 end
