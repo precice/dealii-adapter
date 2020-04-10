@@ -72,6 +72,17 @@ namespace adapter
 {
   using namespace dealii;
 
+  constexpr double beta  = 0.25;
+  constexpr double gamma = 0.5;
+  // Assume delta_t=0.01
+  constexpr double dt_     = 0.01;
+  constexpr double alpha_1 = 1. / (beta * std::pow(dt_, 2));
+  constexpr double alpha_2 = 1. / (beta * dt_);
+  constexpr double alpha_3 = (1 - (2 * beta)) / (2 * beta);
+  constexpr double alpha_4 = gamma / (beta * 0.01);
+  constexpr double alpha_5 = 1 - (gamma / beta);
+  constexpr double alpha_6 = (1 - (gamma / (2 * beta))) * dt_;
+
   namespace Parameters
   {
     struct FESystem
@@ -625,7 +636,8 @@ namespace adapter
     system_setup();
 
     void
-    assemble_system(const BlockVector<double> &solution_delta);
+    assemble_system(const BlockVector<double> &solution_delta,
+                    const BlockVector<double> &acceleration);
 
     friend struct Assembler_Base<dim, NumberType>;
     friend struct Assembler<dim, NumberType>;
@@ -644,6 +656,15 @@ namespace adapter
 
     BlockVector<double>
     get_total_solution(const BlockVector<double> &solution_delta) const;
+
+    void
+    update_acceleration(BlockVector<double> displacement_delta);
+
+    void
+    update_velocity(BlockVector<double> displacement_delta);
+
+    void
+    update_old_variables();
 
     void
     output_results() const;
@@ -688,7 +709,12 @@ namespace adapter
     BlockSparsityPattern      sparsity_pattern;
     BlockSparseMatrix<double> tangent_matrix;
     BlockVector<double>       system_rhs;
-    BlockVector<double>       solution_n;
+    BlockVector<double>       total_displacement;
+    BlockVector<double>       total_displacement_old;
+    BlockVector<double>       velocity;
+    BlockVector<double>       velocity_old;
+    BlockVector<double>       acceleration;
+    BlockVector<double>       acceleration_old;
 
     struct Errors
     {
@@ -777,7 +803,11 @@ namespace adapter
         solution_delta = 0.0;
 
         solve_nonlinear_timestep(solution_delta);
-        solution_n += solution_delta;
+        total_displacement += solution_delta;
+
+        update_acceleration(solution_delta);
+        update_velocity(solution_delta);
+        update_old_variables();
 
         output_results();
         time.increment();
@@ -895,8 +925,15 @@ namespace adapter
     system_rhs.reinit(dofs_per_block);
     system_rhs.collect_sizes();
 
-    solution_n.reinit(dofs_per_block);
-    solution_n.collect_sizes();
+    total_displacement.reinit(dofs_per_block);
+    total_displacement.collect_sizes();
+
+    // Copy initialization
+    total_displacement_old.reinit(total_displacement);
+    velocity.reinit(total_displacement);
+    velocity_old.reinit(total_displacement);
+    acceleration.reinit(total_displacement);
+    acceleration_old.reinit(total_displacement);
 
     setup_qph();
 
@@ -957,7 +994,8 @@ namespace adapter
                   << std::flush;
 
         make_constraints(newton_iteration);
-        assemble_system(solution_delta);
+        update_acceleration(solution_delta);
+        assemble_system(solution_delta, acceleration);
 
         // Residual error = rhs error
         get_error_residual(error_residual);
@@ -1094,9 +1132,47 @@ namespace adapter
   Solid<dim, NumberType>::get_total_solution(
     const BlockVector<double> &solution_delta) const
   {
-    BlockVector<double> solution_total(solution_n);
+    BlockVector<double> solution_total(total_displacement);
     solution_total += solution_delta;
     return solution_total;
+  }
+
+
+
+  template <int dim, typename NumberType>
+  void
+  Solid<dim, NumberType>::update_acceleration(
+    BlockVector<double> displacement_delta)
+  {
+    // TODO: Copy delta reference and avoid one code line here
+    displacement_delta.sadd(alpha_1, -alpha_2, velocity_old);
+    displacement_delta.add(-alpha_3, acceleration_old);
+    acceleration = displacement_delta;
+  }
+
+
+
+  template <int dim, typename NumberType>
+  void
+  Solid<dim, NumberType>::update_velocity(
+    BlockVector<double> displacement_delta)
+  {
+    // TODO: Copy delta reference and avoid one code line here
+    displacement_delta.sadd(alpha_4, alpha_5, velocity_old);
+    displacement_delta.add(alpha_6, acceleration_old);
+    velocity = displacement_delta;
+  }
+
+
+
+  template <int dim, typename NumberType>
+  void
+  Solid<dim, NumberType>::update_old_variables()
+
+  {
+    total_displacement_old = total_displacement;
+    velocity_old           = velocity;
+    acceleration_old       = acceleration;
   }
 
 
@@ -1132,6 +1208,7 @@ namespace adapter
     struct ScratchData_ASM
     {
       const BlockVector<double> &             solution_total;
+      const BlockVector<double> &             acceleration;
       std::vector<Tensor<2, dim, NumberType>> solution_grads_u_total;
 
       FEValues<dim>     fe_values_ref;
@@ -1148,8 +1225,10 @@ namespace adapter
                       const UpdateFlags          uf_cell,
                       const QGauss<dim - 1> &    qf_face,
                       const UpdateFlags          uf_face,
-                      const BlockVector<double> &solution_total)
+                      const BlockVector<double> &solution_total,
+                      const BlockVector<double> &acceleration)
         : solution_total(solution_total)
+        , acceleration(acceleration)
         , solution_grads_u_total(qf_cell.size())
         , fe_values_ref(fe_cell, qf_cell, uf_cell)
         , fe_face_values_ref(fe_cell, qf_face, uf_face)
@@ -1166,6 +1245,7 @@ namespace adapter
 
       ScratchData_ASM(const ScratchData_ASM &rhs)
         : solution_total(rhs.solution_total)
+        , acceleration(rhs.acceleration)
         , solution_grads_u_total(rhs.solution_grads_u_total)
         , fe_values_ref(rhs.fe_values_ref.get_fe(),
                         rhs.fe_values_ref.get_quadrature(),
@@ -1403,6 +1483,7 @@ namespace adapter
               else
                 Assert(i_group <= u_dof, ExcInternalError());
 
+              // Tangent assembly
               for (unsigned int j = 0; j <= i; ++j)
                 {
                   const unsigned int component_j =
@@ -1439,7 +1520,8 @@ namespace adapter
   template <int dim, typename NumberType>
   void
   Solid<dim, NumberType>::assemble_system(
-    const BlockVector<double> &solution_delta)
+    const BlockVector<double> &solution_delta,
+    const BlockVector<double> &acceleration)
   {
     timer.enter_subsection("Assemble linear system");
     std::cout << " ASM " << std::flush;
@@ -1456,7 +1538,7 @@ namespace adapter
     typename Assembler_Base<dim, NumberType>::PerTaskData_ASM per_task_data(
       this);
     typename Assembler_Base<dim, NumberType>::ScratchData_ASM scratch_data(
-      fe, qf_cell, uf_cell, qf_face, uf_face, solution_total);
+      fe, qf_cell, uf_cell, qf_face, uf_face, solution_total, acceleration);
     Assembler<dim, NumberType> assembler;
 
     WorkStream::run(dof_handler_ref.begin_active(),
@@ -1597,14 +1679,14 @@ namespace adapter
     std::vector<std::string> solution_name(dim, "displacement");
 
     data_out.attach_dof_handler(dof_handler_ref);
-    data_out.add_data_vector(solution_n,
+    data_out.add_data_vector(total_displacement,
                              solution_name,
                              DataOut<dim>::type_dof_data,
                              data_component_interpretation);
 
-    Vector<double> soln(solution_n.size());
+    Vector<double> soln(total_displacement.size());
     for (unsigned int i = 0; i < soln.size(); ++i)
-      soln(i) = solution_n(i);
+      soln(i) = total_displacement(i);
     MappingQEulerian<dim> q_mapping(degree, dof_handler_ref, soln);
     data_out.build_patches(q_mapping, degree);
 

@@ -7,7 +7,7 @@ subsection Time
   set End time        = 1
 
   # Time step size
-  set Time step size  = 0.1
+  set Time step size  = 0.01
 
   # Output interval
   set Output interval = 1
