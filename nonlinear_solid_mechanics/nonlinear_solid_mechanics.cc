@@ -72,6 +72,7 @@ namespace adapter
 {
   using namespace dealii;
 
+  // TODO: Add newmark parameter to parameter file
   constexpr double beta  = 0.25;
   constexpr double gamma = 0.5;
   // Assume delta_t=0.01
@@ -1210,6 +1211,7 @@ namespace adapter
       const BlockVector<double> &             solution_total;
       const BlockVector<double> &             acceleration;
       std::vector<Tensor<2, dim, NumberType>> solution_grads_u_total;
+      std::vector<Tensor<1, dim, NumberType>> local_acceleration;
 
       FEValues<dim>     fe_values_ref;
       FEFaceValues<dim> fe_face_values_ref;
@@ -1230,6 +1232,7 @@ namespace adapter
         : solution_total(solution_total)
         , acceleration(acceleration)
         , solution_grads_u_total(qf_cell.size())
+        , local_acceleration(qf_cell.size())
         , fe_values_ref(fe_cell, qf_cell, uf_cell)
         , fe_face_values_ref(fe_cell, qf_face, uf_face)
         , grad_Nx(qf_cell.size(),
@@ -1247,6 +1250,7 @@ namespace adapter
         : solution_total(rhs.solution_total)
         , acceleration(rhs.acceleration)
         , solution_grads_u_total(rhs.solution_grads_u_total)
+        , local_acceleration(rhs.local_acceleration)
         , fe_values_ref(rhs.fe_values_ref.get_fe(),
                         rhs.fe_values_ref.get_quadrature(),
                         rhs.fe_values_ref.get_update_flags())
@@ -1406,6 +1410,9 @@ namespace adapter
       scratch.fe_values_ref[u_fe].get_function_gradients(
         scratch.solution_total, scratch.solution_grads_u_total);
 
+      scratch.fe_values_ref[u_fe].get_function_values(
+        scratch.acceleration, scratch.local_acceleration);
+
       // Const in the whole domain, so we call it once for each cell
       const double rho = lqph[0]->get_rho();
 
@@ -1414,6 +1421,10 @@ namespace adapter
           // Get kinematic variables
           const Tensor<2, dim, NumberType> &grad_u =
             scratch.solution_grads_u_total[q_point];
+
+          const Tensor<1, dim, NumberType> &acc =
+            scratch.local_acceleration[q_point];
+
           const Tensor<2, dim, NumberType> F =
             Physics::Elasticity::Kinematics::F(grad_u);
           const NumberType                 det_F = determinant(F);
@@ -1475,11 +1486,18 @@ namespace adapter
               // Residual assembly
               // Add body force contribution
               if (i_group == u_dof)
-                data.cell_rhs(i) -=
-                  ((symm_grad_Nx[i] * tau) -
-                   (body_force[component_i] *
-                    scratch.fe_values_ref.shape_value(i, q_point))) *
-                  JxW;
+                {
+                  data.cell_rhs(i) -=
+                    ((symm_grad_Nx[i] * tau) -
+                     (body_force[component_i] *
+                      scratch.fe_values_ref.shape_value(i, q_point))) *
+                    JxW;
+                  // Mass matrix contribution and acceleration
+                  // TODO: Merge this loop with tangent assembly
+                  for (uint j = 0; j < dofs_per_cell; ++j)
+                    data.cell_rhs(i) -= shape_value[i] * rho * shape_value[j] *
+                                        acc[component_i] * JxW;
+                }
               else
                 Assert(i_group <= u_dof, ExcInternalError());
 
@@ -1496,11 +1514,17 @@ namespace adapter
                       data.cell_matrix(i, j) += symm_grad_Nx[i] *
                                                 Jc // The material contribution:
                                                 * symm_grad_Nx[j] * JxW;
-                      if (component_i ==
-                          component_j) // geometrical stress contribution
-                        data.cell_matrix(i, j) += grad_Nx[i][component_i] *
-                                                  tau_ns *
-                                                  grad_Nx[j][component_j] * JxW;
+                      // geometrical stress and mass matrix
+                      // contribution
+                      if (component_i == component_j)
+                        {
+                          data.cell_matrix(i, j) +=
+                            (grad_Nx[i][component_i] * tau_ns *
+                               grad_Nx[j][component_j] +
+                             shape_value[i][component_i] * rho * alpha_1 *
+                               shape_value[j][component_j]) *
+                            JxW;
+                        }
                     }
                   else
                     Assert((i_group <= u_dof) && (j_group <= u_dof),
