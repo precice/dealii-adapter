@@ -348,10 +348,10 @@ namespace adapter
     get_total_solution(const BlockVector<double> &solution_delta) const;
 
     void
-    update_acceleration(BlockVector<double> displacement_delta);
+    update_acceleration(BlockVector<double> &displacement_delta);
 
     void
-    update_velocity(BlockVector<double> displacement_delta);
+    update_velocity(BlockVector<double> &displacement_delta);
 
     void
     update_old_variables();
@@ -834,12 +834,10 @@ namespace adapter
   template <int dim, typename NumberType>
   void
   Solid<dim, NumberType>::update_acceleration(
-    BlockVector<double> displacement_delta)
+    BlockVector<double> &displacement_delta)
   {
-    // TODO: Copy delta reference and avoid one code line here
-    displacement_delta.sadd(alpha_1, -alpha_2, velocity_old);
-    displacement_delta.add(-alpha_3, acceleration_old);
-    acceleration = displacement_delta;
+    acceleration.equ(alpha_1, displacement_delta);
+    acceleration.add(-alpha_2, velocity_old, -alpha_3, acceleration_old);
   }
 
 
@@ -847,12 +845,10 @@ namespace adapter
   template <int dim, typename NumberType>
   void
   Solid<dim, NumberType>::update_velocity(
-    BlockVector<double> displacement_delta)
+    BlockVector<double> &displacement_delta)
   {
-    // TODO: Copy delta reference and avoid one code line here
-    displacement_delta.sadd(alpha_4, alpha_5, velocity_old);
-    displacement_delta.add(alpha_6, acceleration_old);
-    velocity = displacement_delta;
+    velocity.equ(alpha_4, displacement_delta);
+    velocity.add(alpha_5, velocity_old, alpha_6, acceleration_old);
   }
 
 
