@@ -10,7 +10,7 @@ subsection Time
   set Time step size  = 0.01
 
   # Output interval
-  set Output interval = 1
+  set Output interval = 2
 end
 
 subsection Newmark parameters

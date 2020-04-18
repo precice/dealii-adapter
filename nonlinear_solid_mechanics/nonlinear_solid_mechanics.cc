@@ -510,7 +510,9 @@ namespace adapter
         update_velocity(solution_delta);
         update_old_variables();
 
-        output_results();
+        if (time.get_timestep() % parameters.output_interval == 0)
+          output_results();
+
         time.increment();
       }
   }
