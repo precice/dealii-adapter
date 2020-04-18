@@ -420,26 +420,22 @@ namespace adapter
     struct Errors
     {
       Errors()
-        : norm(1.0)
-        , u(1.0)
+        : u(1.0)
       {}
 
       void
       reset()
       {
-        norm = 1.0;
-        u    = 1.0;
+        u = 1.0;
       }
       void
       normalise(const Errors &rhs)
       {
-        if (rhs.norm != 0.0)
-          norm /= rhs.norm;
         if (rhs.u != 0.0)
           u /= rhs.u;
       }
 
-      double norm, u;
+      double u;
     };
 
     Errors error_residual, error_residual_0, error_residual_norm, error_update,
@@ -725,12 +721,7 @@ namespace adapter
         const std::pair<unsigned int, double> lin_solver_output =
           solve_linear_system(newton_update);
 
-        // Update error = displacement error
-        // TODO: Distinction between .u and .norm is a relic of step-44, where
-        // .norm refers to the three field error and .u only to the displacement
-        // block. Here, there is only a displacement block and they are
-        // equivalent. So, remove one and print absolute residuals in the
-        // conv_header
+        // Update errors
         get_error_update(newton_update, error_update);
         if (newton_iteration == 0)
           error_update_0 = error_update;
@@ -765,9 +756,9 @@ namespace adapter
     std::cout << std::endl;
 
     std::cout << "    SOLVER STEP    "
-              << " |  LIN_IT   LIN_RES    RES_NORM    "
-              << " RES_U     NU_NORM     "
-              << " NU_U " << std::endl;
+              << " |  LIN_IT   LIN_RES    RES_NORM   "
+              << "RES_ABS      U_NORM    "
+              << " U_ABS " << std::endl;
 
     for (unsigned int i = 0; i < l_width; ++i)
       std::cout << "_";
@@ -807,8 +798,7 @@ namespace adapter
       if (!constraints.is_constrained(i))
         error_res(i) = system_rhs(i);
 
-    error_residual.norm = error_res.l2_norm();
-    error_residual.u    = error_res.block(u_dof).l2_norm();
+    error_residual.u = error_res.block(u_dof).l2_norm();
   }
 
 
@@ -824,8 +814,7 @@ namespace adapter
       if (!constraints.is_constrained(i))
         error_ud(i) = newton_update(i);
 
-    error_update.norm = error_ud.l2_norm();
-    error_update.u    = error_ud.block(u_dof).l2_norm();
+    error_update.u = error_ud.block(u_dof).l2_norm();
   }
 
 
