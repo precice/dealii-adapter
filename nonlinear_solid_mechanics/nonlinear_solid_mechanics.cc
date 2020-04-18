@@ -72,18 +72,6 @@ namespace adapter
 {
   using namespace dealii;
 
-  // TODO: Add newmark parameter to parameter file
-  constexpr double beta  = 0.25;
-  constexpr double gamma = 0.5;
-  // Assume delta_t=0.01
-  constexpr double dt_     = 0.01;
-  constexpr double alpha_1 = 1. / (beta * std::pow(dt_, 2));
-  constexpr double alpha_2 = 1. / (beta * dt_);
-  constexpr double alpha_3 = (1 - (2 * beta)) / (2 * beta);
-  constexpr double alpha_4 = gamma / (beta * 0.01);
-  constexpr double alpha_5 = 1 - (gamma / beta);
-  constexpr double alpha_6 = (1 - (gamma / (2 * beta))) * dt_;
-
   namespace Parameters
   {
     struct FESystem
@@ -333,11 +321,49 @@ namespace adapter
     }
 
 
+    struct NewmarkParameters
+    {
+      double beta;
+      double gamma;
+
+      static void
+      declare_parameters(ParameterHandler &prm);
+
+      void
+      parse_parameters(ParameterHandler &prm);
+    };
+
+    void
+    NewmarkParameters::declare_parameters(ParameterHandler &prm)
+    {
+      prm.enter_subsection("Newmark parameters");
+      {
+        prm.declare_entry("beta", "0.25", Patterns::Double(0, 0.5), "beta");
+
+        prm.declare_entry("gamma", "0.5", Patterns::Double(0, 1), "gamma");
+      }
+      prm.leave_subsection();
+    }
+
+    void
+    NewmarkParameters::parse_parameters(ParameterHandler &prm)
+    {
+      prm.enter_subsection("Newmark parameters");
+      {
+        beta  = prm.get_double("beta");
+        gamma = prm.get_double("gamma");
+      }
+      prm.leave_subsection();
+    }
+
+
+
     struct AllParameters : public FESystem,
                            public Materials,
                            public LinearSolver,
                            public NonlinearSolver,
-                           public Time
+                           public Time,
+                           public NewmarkParameters
 
     {
       AllParameters(const std::string &input_file);
@@ -369,6 +395,7 @@ namespace adapter
       LinearSolver::declare_parameters(prm);
       NonlinearSolver::declare_parameters(prm);
       Time::declare_parameters(prm);
+      NewmarkParameters::declare_parameters(prm);
     }
 
     void
@@ -379,6 +406,7 @@ namespace adapter
       LinearSolver::parse_parameters(prm);
       NonlinearSolver::parse_parameters(prm);
       Time::parse_parameters(prm);
+      NewmarkParameters::parse_parameters(prm);
     }
   } // namespace Parameters
 
@@ -706,6 +734,17 @@ namespace adapter
     const unsigned int    n_q_points;
     const unsigned int    n_q_points_f;
 
+    // Newmark parameters
+    const double alpha_1 =
+      1. / (parameters.beta * std::pow(parameters.delta_t, 2));
+    const double alpha_2 = 1. / (parameters.beta * parameters.delta_t);
+    const double alpha_3 = (1 - (2 * parameters.beta)) / (2 * parameters.beta);
+    const double alpha_4 =
+      parameters.gamma / (parameters.beta * parameters.delta_t);
+    const double alpha_5 = 1 - (parameters.gamma / parameters.beta);
+    const double alpha_6 =
+      (1 - (parameters.gamma / (2 * parameters.beta))) * parameters.delta_t;
+
     AffineConstraints<double> constraints;
     BlockSparsityPattern      sparsity_pattern;
     BlockSparseMatrix<double> tangent_matrix;
@@ -844,7 +883,7 @@ namespace adapter
 
 
     // refine all cells global_refinement times
-    const unsigned int global_refinement = 1;
+    const unsigned int global_refinement = 0;
     triangulation.refine_global(global_refinement);
 
 
@@ -1391,11 +1430,12 @@ namespace adapter
       ScratchData_ASM &                                     scratch,
       PerTaskData_ASM &                                     data)
     {
-      const unsigned int & n_q_points        = data.solid->n_q_points;
-      const unsigned int & dofs_per_cell     = data.solid->dofs_per_cell;
-      const FESystem<dim> &fe                = data.solid->fe;
-      const unsigned int & u_dof             = data.solid->u_dof;
-      const FEValuesExtractors::Vector &u_fe = data.solid->u_fe;
+      const unsigned int & n_q_points           = data.solid->n_q_points;
+      const unsigned int & dofs_per_cell        = data.solid->dofs_per_cell;
+      const FESystem<dim> &fe                   = data.solid->fe;
+      const unsigned int & u_dof                = data.solid->u_dof;
+      const FEValuesExtractors::Vector &u_fe    = data.solid->u_fe;
+      const double &                    alpha_1 = data.solid->alpha_1;
 
       data.reset();
       scratch.reset();
@@ -1468,13 +1508,11 @@ namespace adapter
             scratch.symm_grad_Nx[q_point];
           const std::vector<Tensor<2, dim>> &grad_Nx = scratch.grad_Nx[q_point];
           const double JxW = scratch.fe_values_ref.JxW(q_point);
-          //          const std::vector<Tensor<1, dim, NumberType>> &shape_value
-          //          =
-          //            scratch.shape_value[q_point];
+          const std::vector<Tensor<1, dim, NumberType>> &shape_value =
+            scratch.shape_value[q_point];
 
           // Define const force vector for gravity
-          const Tensor<1, dim> body_force({0, rho * -2.});
-
+          const Tensor<1, dim> body_force({0, -2. * rho});
 
           for (unsigned int i = 0; i < dofs_per_cell; ++i)
             {

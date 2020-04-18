@@ -4,13 +4,21 @@
 
 subsection Time
   # End time
-  set End time        = 1
+  set End time        = 10
 
   # Time step size
   set Time step size  = 0.01
 
   # Output interval
   set Output interval = 1
+end
+
+subsection Newmark parameters
+  # beta
+  set beta    = 0.25
+
+  # gamma
+  set gamma   = 0.5
 end
 
 subsection Material properties
@@ -26,10 +34,10 @@ end
 
 subsection Finite element system
   # Polynomial degree of the FE system
-  set Polynomial degree   = 1
+  set Polynomial degree   = 2
 
   # Gauss quadrature order
-  set Quadrature order    = 3
+  set Quadrature order    = 4
 end
 
 subsection Linear solver
@@ -46,7 +54,7 @@ subsection Linear solver
   set Preconditioner relaxation = 0.65
 
   # Type of solver used to solve the linear system
-  set Solver type               = CG
+  set Solver type               = Direct
 end
 
 subsection Nonlinear solver
