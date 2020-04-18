@@ -1174,16 +1174,18 @@ namespace adapter
                 fe.system_to_base_index(i).first.first;
 
               // Residual assembly
-              // Add body force contribution
               if (i_group == u_dof)
                 {
+                  // Geometrical stress and body force contribution
                   data.cell_rhs(i) -=
                     ((symm_grad_Nx[i] * tau) -
                      (body_force[component_i] *
                       scratch.fe_values_ref.shape_value(i, q_point))) *
                     JxW;
-                  // Mass matrix contribution and acceleration
-                  // TODO: Merge this loop with tangent assembly
+                  // Mass matrix contribution with acceleration
+                  // Cannot be merged with tangent assembly, since there, the
+                  // matrix symmetry is utilized i.e. only the upper half is
+                  // assembled
                   for (uint j = 0; j < dofs_per_cell; ++j)
                     data.cell_rhs(i) -= shape_value[i] * rho * shape_value[j] *
                                         acc[component_i] * JxW;
@@ -1201,11 +1203,11 @@ namespace adapter
 
                   if ((i_group == j_group) && (i_group == u_dof))
                     {
-                      data.cell_matrix(i, j) += symm_grad_Nx[i] *
-                                                Jc // The material contribution:
-                                                * symm_grad_Nx[j] * JxW;
-                      // geometrical stress and mass matrix
-                      // contribution
+                      // The material contribution:
+                      data.cell_matrix(i, j) +=
+                        symm_grad_Nx[i] * Jc * symm_grad_Nx[j] * JxW;
+
+                      // Geometrical stress and mass matrix contributions
                       if (component_i == component_j)
                         {
                           data.cell_matrix(i, j) +=
