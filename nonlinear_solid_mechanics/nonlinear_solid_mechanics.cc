@@ -598,8 +598,7 @@ namespace adapter
     std::cout << "Triangulation:"
               << "\n\t Number of active cells: "
               << triangulation.n_active_cells()
-              << "\n\t Polynomial degree: "
-              << parameters.poly_degree
+              << "\n\t Polynomial degree: " << parameters.poly_degree
               << "\n\t Number of degrees of freedom: "
               << dof_handler_ref.n_dofs() << std::endl;
 
@@ -1387,6 +1386,11 @@ namespace adapter
   Solid<dim, NumberType>::output_results() const
   {
     DataOut<dim> data_out;
+    // TODO: Discuss this as an option
+    //    DataOutBase::VtkFlags flags;
+    //    flags.write_higher_order_cells = true;
+    //    data_out.set_flags(flags);
+
     std::vector<DataComponentInterpretation::DataComponentInterpretation>
       data_component_interpretation(
         dim, DataComponentInterpretation::component_is_part_of_vector);
