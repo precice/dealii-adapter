@@ -598,6 +598,8 @@ namespace adapter
     std::cout << "Triangulation:"
               << "\n\t Number of active cells: "
               << triangulation.n_active_cells()
+              << "\n\t Polynomial degree: "
+              << parameters.poly_degree
               << "\n\t Number of degrees of freedom: "
               << dof_handler_ref.n_dofs() << std::endl;
 
@@ -631,6 +633,7 @@ namespace adapter
     total_displacement_old.reinit(total_displacement);
     velocity.reinit(total_displacement);
     velocity_old.reinit(total_displacement);
+    // TODO: Estimate acc properly in case of body forces
     acceleration.reinit(total_displacement);
     acceleration_old.reinit(total_displacement);
 
@@ -710,7 +713,7 @@ namespace adapter
         if (newton_iteration > 0 &&
               (error_update_norm.u <= parameters.tol_u &&
                error_residual_norm.u <= parameters.tol_f) ||
-            (error_update.u <= 1e-15 && error_residual.u <= 5e-9))
+            (error_update.u <= 5e-15 && error_residual.u <= 5e-9))
           {
             std::cout << " CONVERGED! " << std::endl;
             print_conv_footer();

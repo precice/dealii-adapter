@@ -10,7 +10,7 @@ subsection Time
   set Time step size  = 0.01
 
   # Output interval
-  set Output interval = 2
+  set Output interval = 1
 end
 
 subsection Newmark parameters
@@ -34,7 +34,7 @@ end
 
 subsection Finite element system
   # Polynomial degree of the FE system
-  set Polynomial degree   = 2
+  set Polynomial degree   = 4
 
   # Gauss quadrature order
   set Quadrature order    = 4
