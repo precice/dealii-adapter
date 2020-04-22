@@ -37,7 +37,7 @@ subsection Finite element system
   set Polynomial degree   = 4
 
   # Gauss quadrature order
-  set Quadrature order    = 4
+  set Quadrature order    = 6
 end
 
 subsection Linear solver
@@ -66,4 +66,30 @@ subsection Nonlinear solver
 
   # Force residual tolerance
   set Tolerance force               = 1.0e-9
+end
+
+subsection precice configuration
+    # Cases: FSI3 or PF for perpendicular flap
+    set Scenario            = FSI3
+
+    # Whether preCICE is used for coupling to another solver
+    set Enable precice      = true
+
+    # Name of the precice configuration file
+    set precice config-file = precice-config.xml
+
+    # Name of the participant in the precice-config.xml file
+    set Participant         = Solid
+
+    # Name of the coupling mesh in the precice-config.xml file
+    set Mesh name      = Solid_nodes
+
+    # Name of the read data in the precice-config.xml file
+    set Read data name      = Force
+
+    # Name of the write data in the precice-config.xml file
+    set Write data name     = Displacement
+
+    # Boundary mesh ID of the coupling interface in deal.II
+    set Interface mesh ID   = 6
 end

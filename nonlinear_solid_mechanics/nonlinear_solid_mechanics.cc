@@ -72,7 +72,7 @@
 namespace adapter
 {
   using namespace dealii;
-
+  // TODO: Adapt parameter file: Remove preconditioner, q_order etc.
   class Time
   {
   public:
@@ -712,7 +712,7 @@ namespace adapter
         if (newton_iteration > 0 &&
               (error_update_norm.u <= parameters.tol_u &&
                error_residual_norm.u <= parameters.tol_f) ||
-            (error_update.u <= 5e-15 && error_residual.u <= 5e-9))
+            (error_update.u <= 1e-15 && error_residual.u <= 5e-9))
           {
             std::cout << " CONVERGED! " << std::endl;
             print_conv_footer();

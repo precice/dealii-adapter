@@ -293,12 +293,98 @@ namespace adapter
 
 
 
+    struct PreciceConfiguration
+    {
+      std::string  scenario;
+      bool         enable_precice;
+      std::string  config_file;
+      std::string  participant;
+      std::string  mesh_name;
+      std::string  read_data_name;
+      std::string  write_data_name;
+      unsigned int interface_mesh_id;
+
+      static void
+      declare_parameters(ParameterHandler &prm);
+
+      void
+      parse_parameters(ParameterHandler &prm);
+    };
+
+
+    void
+    PreciceConfiguration::declare_parameters(ParameterHandler &prm)
+    {
+      prm.enter_subsection("precice configuration");
+      {
+        prm.declare_entry("Scenario",
+                          "FSI3",
+                          Patterns::Selection("FSI3|PF"),
+                          "Cases: FSI3 or PF for perpendicular flap");
+        prm.declare_entry(
+          "Enable precice",
+          "true",
+          Patterns::Bool(),
+          "Whether preCICE is used for coupling to another solver");
+        prm.declare_entry("precice config-file",
+                          "precice-config.xml",
+                          Patterns::Anything(),
+                          "Name of the precice configuration file");
+        prm.declare_entry(
+          "Participant",
+          "dealiisolver",
+          Patterns::Anything(),
+          "Name of the participant in the precice-config.xml file");
+        prm.declare_entry(
+          "Mesh name",
+          "dealii-mesh-nodes",
+          Patterns::Anything(),
+          "Name of the coupling mesh in the precice-config.xml file");
+        prm.declare_entry(
+          "Read data name",
+          "received-data",
+          Patterns::Anything(),
+          "Name of the read data in the precice-config.xml file");
+        prm.declare_entry(
+          "Write data name",
+          "calculated-data",
+          Patterns::Anything(),
+          "Name of the write data in the precice-config.xml file");
+        prm.declare_entry(
+          "Interface mesh ID",
+          "1",
+          Patterns::Integer(0),
+          "Boundary mesh ID of the coupling interface in deal.II");
+      }
+      prm.leave_subsection();
+    }
+
+    void
+    PreciceConfiguration::parse_parameters(ParameterHandler &prm)
+    {
+      prm.enter_subsection("precice configuration");
+      {
+        scenario          = prm.get("Scenario");
+        enable_precice    = prm.get_bool("Enable precice");
+        config_file       = prm.get("precice config-file");
+        participant       = prm.get("Participant");
+        mesh_name         = prm.get("Mesh name");
+        read_data_name    = prm.get("Read data name");
+        write_data_name   = prm.get("Write data name");
+        interface_mesh_id = prm.get_integer("Interface mesh ID");
+      }
+      prm.leave_subsection();
+    }
+
+
+
     struct AllParameters : public FESystem,
                            public Materials,
                            public LinearSolver,
                            public NonlinearSolver,
                            public Time,
-                           public NewmarkParameters
+                           public NewmarkParameters,
+                           public PreciceConfiguration
 
     {
       AllParameters(const std::string &input_file);
