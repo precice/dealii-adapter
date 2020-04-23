@@ -417,6 +417,7 @@ namespace adapter
       NonlinearSolver::declare_parameters(prm);
       Time::declare_parameters(prm);
       NewmarkParameters::declare_parameters(prm);
+      PreciceConfiguration::declare_parameters(prm);
     }
 
     void
@@ -428,6 +429,7 @@ namespace adapter
       NonlinearSolver::parse_parameters(prm);
       Time::parse_parameters(prm);
       NewmarkParameters::parse_parameters(prm);
+      PreciceConfiguration::parse_parameters(prm);
     }
   } // namespace Parameters
 } // namespace adapter

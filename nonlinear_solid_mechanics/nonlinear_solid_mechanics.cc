@@ -60,6 +60,7 @@
 
 #include <deal.II/physics/elasticity/kinematics.h>
 #include <deal.II/physics/elasticity/standard_tensors.h>
+#include <deal.II/physics/transformations.h>
 
 #include <fstream>
 #include <iostream>
@@ -549,7 +550,7 @@ namespace adapter
     // Cell iterator for boundary conditions
     const unsigned int clamped_boundary_id    = 1;
     const unsigned int do_nothing_boundary_id = 2;
-    //    const unsigned int neumann_boundary_id    = 11;
+    const unsigned int neumann_boundary_id    = 11;
 
     typename Triangulation<dim>::active_cell_iterator cell = triangulation
                                                                .begin_active(),
@@ -562,10 +563,11 @@ namespace adapter
           {
             if (cell->face(face)->boundary_id() == id_flap_short_bottom)
               cell->face(face)->set_boundary_id(clamped_boundary_id);
-            else if (cell->face(face)->boundary_id() == id_flap_short_top ||
-                     cell->face(face)->boundary_id() == id_flap_long_bottom ||
+            else if (cell->face(face)->boundary_id() == id_flap_long_bottom ||
                      cell->face(face)->boundary_id() == id_flap_long_top)
               cell->face(face)->set_boundary_id(do_nothing_boundary_id);
+            else if (cell->face(face)->boundary_id() == id_flap_short_top)
+              cell->face(face)->set_boundary_id(neumann_boundary_id);
             else
               AssertThrow(false,
                           ExcMessage("Unknown boundary id, did "
@@ -1019,7 +1021,6 @@ namespace adapter
     {
       const unsigned int & n_q_points_f  = data.solid->n_q_points_f;
       const unsigned int & dofs_per_cell = data.solid->dofs_per_cell;
-      const Time &         time          = data.solid->time;
       const FESystem<dim> &fe            = data.solid->fe;
       const unsigned int & u_dof         = data.solid->u_dof;
 
@@ -1028,19 +1029,23 @@ namespace adapter
         if (cell->face(face)->at_boundary() == true &&
             cell->face(face)->boundary_id() == 11)
           {
+            std::cout << "\n" << std::endl;
             scratch.fe_face_values_ref.reinit(cell, face);
 
             for (unsigned int f_q_point = 0; f_q_point < n_q_points_f;
                  ++f_q_point)
               {
-                const double time_ramp = (time.current() / time.end());
-                const double magnitude =
-                  (1.0 / (16.0 * 1e-3 /*parameters.scale*/ * 1.0 *
-                          1e-3 /*parameters.scale*/)) *
-                  time_ramp; // (Total force) / (RHS surface area)
+                const Tensor<2, dim, NumberType> F =
+                  Physics::Elasticity::Kinematics::F(
+                    scratch.solution_grads_u_total[f_q_point]);
                 Tensor<1, dim> dir;
-                dir[1]                        = 1.0;
-                const Tensor<1, dim> traction = magnitude * dir;
+                dir[0] = 1.0;
+                Tensor<1, dim> res;
+
+                res =
+                  Physics::Transformations::Contravariant::pull_back(dir, F);
+
+                const Tensor<1, dim> traction = dir;
 
                 for (unsigned int i = 0; i < dofs_per_cell; ++i)
                   {
@@ -1056,7 +1061,8 @@ namespace adapter
                         const double JxW =
                           scratch.fe_face_values_ref.JxW(f_q_point);
 
-                        data.cell_rhs(i) += (Ni * traction[component_i]) * JxW;
+                        data.cell_rhs(i) +=
+                          (Ni * 0 * traction[component_i]) * JxW;
                       }
                   }
               }
@@ -1223,7 +1229,7 @@ namespace adapter
             }
         }
 
-
+      // Copy triangular matrix
       for (unsigned int i = 0; i < dofs_per_cell; ++i)
         for (unsigned int j = i + 1; j < dofs_per_cell; ++j)
           data.cell_matrix(i, j) = data.cell_matrix(j, i);
