@@ -328,7 +328,8 @@ namespace adapter
 
     void
     assemble_system(const BlockVector<double> &solution_delta,
-                    const BlockVector<double> &acceleration);
+                    const BlockVector<double> &acceleration,
+                    const BlockVector<double> &external_stress);
 
     friend struct Assembler_Base<dim, NumberType>;
     friend struct Assembler<dim, NumberType>;
@@ -417,6 +418,9 @@ namespace adapter
     BlockVector<double>       velocity_old;
     BlockVector<double>       acceleration;
     BlockVector<double>       acceleration_old;
+
+    // container for data exchange with precice
+    BlockVector<double> external_stress;
 
     struct Errors
     {
@@ -550,7 +554,7 @@ namespace adapter
     // Cell iterator for boundary conditions
     const unsigned int clamped_boundary_id    = 1;
     const unsigned int do_nothing_boundary_id = 2;
-    const unsigned int neumann_boundary_id    = 11;
+    const unsigned int neumann_boundary_id    = parameters.interface_mesh_id;
 
     typename Triangulation<dim>::active_cell_iterator cell = triangulation
                                                                .begin_active(),
@@ -638,6 +642,8 @@ namespace adapter
     acceleration.reinit(total_displacement);
     acceleration_old.reinit(total_displacement);
 
+    external_stress.reinit(total_displacement);
+
     setup_qph();
 
     timer.leave_subsection();
@@ -698,7 +704,7 @@ namespace adapter
 
         make_constraints(newton_iteration);
         update_acceleration(solution_delta);
-        assemble_system(solution_delta, acceleration);
+        assemble_system(solution_delta, acceleration, external_stress);
 
         // Residual error = rhs error
         get_error_residual(error_residual);
@@ -904,6 +910,8 @@ namespace adapter
       std::vector<Tensor<2, dim, NumberType>> solution_grads_u_total;
       std::vector<Tensor<1, dim, NumberType>> local_acceleration;
 
+      const BlockVector<double> &external_stress;
+
       FEValues<dim>     fe_values_ref;
       FEFaceValues<dim> fe_face_values_ref;
 
@@ -919,11 +927,13 @@ namespace adapter
                       const QGauss<dim - 1> &    qf_face,
                       const UpdateFlags          uf_face,
                       const BlockVector<double> &solution_total,
-                      const BlockVector<double> &acceleration)
+                      const BlockVector<double> &acceleration,
+                      const BlockVector<double> &external_stress)
         : solution_total(solution_total)
         , acceleration(acceleration)
         , solution_grads_u_total(qf_cell.size())
         , local_acceleration(qf_cell.size())
+        , external_stress(external_stress)
         , fe_values_ref(fe_cell, qf_cell, uf_cell)
         , fe_face_values_ref(fe_cell, qf_face, uf_face)
         , grad_Nx(qf_cell.size(),
@@ -942,6 +952,7 @@ namespace adapter
         , acceleration(rhs.acceleration)
         , solution_grads_u_total(rhs.solution_grads_u_total)
         , local_acceleration(rhs.local_acceleration)
+        , external_stress(rhs.external_stress)
         , fe_values_ref(rhs.fe_values_ref.get_fe(),
                         rhs.fe_values_ref.get_quadrature(),
                         rhs.fe_values_ref.get_update_flags())
@@ -1019,17 +1030,25 @@ namespace adapter
       ScratchData_ASM &                                     scratch,
       PerTaskData_ASM &                                     data)
     {
-      const unsigned int & n_q_points_f  = data.solid->n_q_points_f;
-      const unsigned int & dofs_per_cell = data.solid->dofs_per_cell;
-      const FESystem<dim> &fe            = data.solid->fe;
-      const unsigned int & u_dof         = data.solid->u_dof;
+      const unsigned int & n_q_points_f      = data.solid->n_q_points_f;
+      const unsigned int & dofs_per_cell     = data.solid->dofs_per_cell;
+      const FESystem<dim> &fe                = data.solid->fe;
+      const unsigned int & u_dof             = data.solid->u_dof;
+      const FEValuesExtractors::Vector &u_fe = data.solid->u_fe;
+      const unsigned int &interf_id = data.solid->parameters.interface_mesh_id;
 
       for (unsigned int face = 0; face < GeometryInfo<dim>::faces_per_cell;
            ++face)
         if (cell->face(face)->at_boundary() == true &&
-            cell->face(face)->boundary_id() == 11)
+            cell->face(face)->boundary_id() == interf_id)
           {
             scratch.fe_face_values_ref.reinit(cell, face);
+
+            // Initialize vector for values at each quad point
+            std::vector<Tensor<1, dim, NumberType>> local_stress(n_q_points_f);
+
+            scratch.fe_face_values_ref[u_fe].get_function_values(
+              scratch.external_stress, local_stress);
 
             for (unsigned int f_q_point = 0; f_q_point < n_q_points_f;
                  ++f_q_point)
@@ -1037,14 +1056,10 @@ namespace adapter
                 const Tensor<2, dim, NumberType> F =
                   Physics::Elasticity::Kinematics::F(
                     scratch.solution_grads_u_total[f_q_point]);
-                Tensor<1, dim> dir;
-                dir[0] = 1.0;
-                Tensor<1, dim> res;
 
-                res =
-                  Physics::Transformations::Contravariant::pull_back(dir, F);
-
-                const Tensor<1, dim> traction = dir;
+                const Tensor<1, dim, NumberType> referential_stress =
+                  Physics::Transformations::Contravariant::pull_back(
+                    local_stress[f_q_point], F);
 
                 for (unsigned int i = 0; i < dofs_per_cell; ++i)
                   {
@@ -1061,7 +1076,7 @@ namespace adapter
                           scratch.fe_face_values_ref.JxW(f_q_point);
 
                         data.cell_rhs(i) +=
-                          (Ni * 0 * traction[component_i]) * JxW;
+                          (Ni * referential_stress[component_i]) * JxW;
                       }
                   }
               }
@@ -1240,7 +1255,8 @@ namespace adapter
   void
   Solid<dim, NumberType>::assemble_system(
     const BlockVector<double> &solution_delta,
-    const BlockVector<double> &acceleration)
+    const BlockVector<double> &acceleration,
+    const BlockVector<double> &external_stress)
   {
     timer.enter_subsection("Assemble linear system");
     std::cout << " ASM " << std::flush;
@@ -1257,7 +1273,15 @@ namespace adapter
     typename Assembler_Base<dim, NumberType>::PerTaskData_ASM per_task_data(
       this);
     typename Assembler_Base<dim, NumberType>::ScratchData_ASM scratch_data(
-      fe, qf_cell, uf_cell, qf_face, uf_face, solution_total, acceleration);
+      fe,
+      qf_cell,
+      uf_cell,
+      qf_face,
+      uf_face,
+      solution_total,
+      acceleration,
+      external_stress);
+
     Assembler<dim, NumberType> assembler;
 
     WorkStream::run(dof_handler_ref.begin_active(),
