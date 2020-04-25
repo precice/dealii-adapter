@@ -1029,7 +1029,6 @@ namespace adapter
         if (cell->face(face)->at_boundary() == true &&
             cell->face(face)->boundary_id() == 11)
           {
-            std::cout << "\n" << std::endl;
             scratch.fe_face_values_ref.reinit(cell, face);
 
             for (unsigned int f_q_point = 0; f_q_point < n_q_points_f;
