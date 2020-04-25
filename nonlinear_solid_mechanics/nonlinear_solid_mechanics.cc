@@ -503,6 +503,8 @@ namespace adapter
     output_results();
     time.increment();
 
+    coupling_functions.initialize_precice(dof_handler_ref);
+
     BlockVector<NumberType> solution_delta(dofs_per_block);
     while (time.current() <= time.end())
       {
