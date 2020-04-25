@@ -65,6 +65,7 @@
 #include <fstream>
 #include <iostream>
 
+#include "include/coupling_functions.h"
 #include "include/parameter_handling.h"
 #include "precice/SolverInterface.hpp"
 
@@ -422,6 +423,8 @@ namespace adapter
     // container for data exchange with precice
     BlockVector<double> external_stress;
 
+    PreciceDealCoupling::CouplingFunctions<dim> coupling_functions;
+
     struct Errors
     {
       Errors()
@@ -481,6 +484,7 @@ namespace adapter
     , qf_face(parameters.poly_degree + 2)
     , n_q_points(qf_cell.size())
     , n_q_points_f(qf_face.size())
+    , coupling_functions(parameters)
   {}
 
   template <int dim, typename NumberType>
