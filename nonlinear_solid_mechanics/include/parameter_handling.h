@@ -7,6 +7,7 @@ namespace adapter
 {
   using namespace dealii;
 
+  // TODO: Merge some structs together
   namespace Parameters
   {
     struct FESystem
@@ -29,7 +30,6 @@ namespace adapter
                           "1",
                           Patterns::Integer(0),
                           "Polynomial degree of the FE system");
-
       }
       prm.leave_subsection();
     }
@@ -96,8 +96,6 @@ namespace adapter
       std::string type_lin;
       double      tol_lin;
       double      max_iterations_lin;
-      std::string preconditioner_type;
-      double      preconditioner_relaxation;
 
       static void
       declare_parameters(ParameterHandler &prm);
@@ -126,16 +124,6 @@ namespace adapter
           "1",
           Patterns::Double(0.0),
           "Linear solver iterations (multiples of the system matrix size)");
-
-        prm.declare_entry("Preconditioner type",
-                          "ssor",
-                          Patterns::Selection("jacobi|ssor"),
-                          "Type of preconditioner");
-
-        prm.declare_entry("Preconditioner relaxation",
-                          "0.65",
-                          Patterns::Double(0.0),
-                          "Preconditioner relaxation value");
       }
       prm.leave_subsection();
     }
@@ -145,11 +133,9 @@ namespace adapter
     {
       prm.enter_subsection("Linear solver");
       {
-        type_lin                  = prm.get("Solver type");
-        tol_lin                   = prm.get_double("Residual");
-        max_iterations_lin        = prm.get_double("Max iteration multiplier");
-        preconditioner_type       = prm.get("Preconditioner type");
-        preconditioner_relaxation = prm.get_double("Preconditioner relaxation");
+        type_lin           = prm.get("Solver type");
+        tol_lin            = prm.get_double("Residual");
+        max_iterations_lin = prm.get_double("Max iteration multiplier");
       }
       prm.leave_subsection();
     }

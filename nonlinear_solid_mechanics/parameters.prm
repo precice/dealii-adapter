@@ -44,12 +44,6 @@ subsection Linear solver
   # Linear solver residual (scaled by residual norm)
   set Residual                  = 1e-6
 
-  # Preconditioner type
-  set Preconditioner type       = ssor
-
-  # Preconditioner relaxation value
-  set Preconditioner relaxation = 0.65
-
   # Type of solver used to solve the linear system
   set Solver type               = Direct
 end

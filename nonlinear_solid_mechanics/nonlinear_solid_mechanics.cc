@@ -73,7 +73,7 @@
 namespace adapter
 {
   using namespace dealii;
-  // TODO: Adapt parameter file: Remove preconditioner, q_order etc.
+
   class Time
   {
   public:
@@ -1354,9 +1354,9 @@ namespace adapter
           GrowingVectorMemory<Vector<double>> GVM;
           SolverCG<Vector<double>>            solver_CG(solver_control, GVM);
 
+          // TODO: Change to different one
           PreconditionSelector<SparseMatrix<double>, Vector<double>>
-            preconditioner(parameters.preconditioner_type,
-                           parameters.preconditioner_relaxation);
+            preconditioner("ssor", .65);
           preconditioner.use_matrix(tangent_matrix.block(u_dof, u_dof));
 
           solver_CG.solve(tangent_matrix.block(u_dof, u_dof),
