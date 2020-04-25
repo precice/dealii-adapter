@@ -35,9 +35,6 @@ end
 subsection Finite element system
   # Polynomial degree of the FE system
   set Polynomial degree   = 4
-
-  # Gauss quadrature order
-  set Quadrature order    = 6
 end
 
 subsection Linear solver

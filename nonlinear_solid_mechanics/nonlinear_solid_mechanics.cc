@@ -473,8 +473,8 @@ namespace adapter
     , dofs_per_cell(fe.dofs_per_cell)
     , u_fe(first_u_component)
     , dofs_per_block(n_blocks)
-    , qf_cell(parameters.quad_order)
-    , qf_face(parameters.quad_order)
+    , qf_cell(parameters.poly_degree + 2)
+    , qf_face(parameters.poly_degree + 2)
     , n_q_points(qf_cell.size())
     , n_q_points_f(qf_face.size())
   {}
