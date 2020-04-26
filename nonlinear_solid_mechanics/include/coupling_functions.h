@@ -19,26 +19,66 @@ namespace adapter
 
   namespace PreciceDealCoupling
   {
-    template <int dim, typename Number = double>
+    template <int dim, typename VectorType>
     class CouplingFunctions
     {
     public:
+      /**
+       * @brief      Constructor, which sets up the precice Solverinterface
+       *
+       * @param[in]  parameters Parameter class, which hold the data specified
+       *             in the parameters.prm file
+       */
       CouplingFunctions(const Parameters::AllParameters &parameters);
 
+      /**
+       * @brief     Initializes preCICE and passes all relevant data to preCICE
+       *
+       * @param[in] dof_handler Initialized dof_handler
+       * @param[in] coupling_data Data, which should be given to preCICE and
+       *            exchanged with other participants. If this data is
+       *            required already in the beginning depends on your individual
+       *            configuration and preCICE determines it automatically.
+       *            In many cases, this data will just represent your initial
+       *            condition.
+       */
       void
-      initialize_precice(const DoFHandler<dim> &dof_handler);
+      initialize_precice(const DoFHandler<dim> &dof_handler,
+                         const VectorType &     coupling_data);
 
       void
-      advance_precice();
+      advance_precice(const VectorType &coupling_data,
+                      const double      computedTimestepLength);
 
       void
-      extract_relevant_displacements();
+      extract_relevant_displacements(const VectorType &coupling_data);
 
+      /**
+       * @brief      Saves time dependent variables in case of an implicit coupling
+       *
+       * @param[in]  state_variables vector containing all variables to store
+       *
+       * @note       This function only makes sense, if it is used with
+       *             @p reload_old_state. Therefore, the order, in which the
+       *             variables are passed into the vector must be the same for
+       *             both functions.
+       */
       void
-      save_old_state();
+      save_old_state(const std::vector<VectorType> &state_variables);
 
+      /**
+       * @brief      Reloads the previously stored variables in case of an implicit
+       *             coupling
+       *
+       * @param[out] state_variables vector containing all variables to reload
+       *
+       * @note       This function only makes sense, if the state variables have been
+       *             stored by calling @p save_old_state. Therefore, the order, in
+       *             which the variables are passed into the vector must be the
+       * same for both functions.
+       */
       void
-      reload_old_state();
+      reload_old_state(std::vector<VectorType> &state_variables) const;
 
 
     private:
@@ -61,14 +101,16 @@ namespace adapter
       IndexSet coupling_dofs;
 
       std::vector<int>    interface_nodes_ids;
-      // TODO: Check, if this might be better a BlockVector
-      std::vector<Number> precice_forces;
-      std::vector<Number> precice_displacements;
+      std::vector<double> precice_forces;
+      std::vector<double> precice_displacements;
+
+      std::vector<VectorType> old_state_data;
     };
 
 
-    template <int dim, typename Number>
-    CouplingFunctions<dim, Number>::CouplingFunctions(
+
+    template <int dim, typename VectorType>
+    CouplingFunctions<dim, VectorType>::CouplingFunctions(
       const Parameters::AllParameters &parameters)
       : deal_boundary_id(parameters.interface_mesh_id)
       , enable_precice(parameters.enable_precice)
@@ -77,14 +119,19 @@ namespace adapter
       , mesh_name(parameters.mesh_name)
       , read_data_name(parameters.read_data_name)
       , write_data_name(parameters.write_data_name)
-      , precice(participant, config_file, /*proc_id*/ 0, /*n_procs*/ 1)
+      , precice(participant,
+                config_file,
+                Utilities::MPI::this_mpi_process(MPI_COMM_WORLD),
+                Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD))
     {}
 
 
-    template <int dim, typename Number>
+
+    template <int dim, typename VectorType>
     void
-    CouplingFunctions<dim, Number>::initialize_precice(
-      const DoFHandler<dim> &dof_handler)
+    CouplingFunctions<dim, VectorType>::initialize_precice(
+      const DoFHandler<dim> &dof_handler,
+      const VectorType &     coupling_data)
     {
       Assert(dim == precice.getDimensions(),
              ExcDimensionMismatch(dim, precice.getDimensions()));
@@ -110,7 +157,7 @@ namespace adapter
       std::cout << "\t Number of coupling nodes:     " << n_interface_nodes
                 << std::endl;
 
-      std::vector<Number> interface_nodes_positions(dim * n_interface_nodes);
+      std::vector<double> interface_nodes_positions(dim * n_interface_nodes);
 
       precice_displacements.resize(dim * n_interface_nodes);
       interface_nodes_ids.resize(n_interface_nodes);
@@ -165,7 +212,7 @@ namespace adapter
             precice::constants::actionWriteInitialData()))
         {
           // store initial write_data for precice in precice_displacements
-          extract_relevant_displacements();
+          extract_relevant_displacements(coupling_data);
 
           precice.writeBlockVectorData(displacements_data_id,
                                        n_interface_nodes,
@@ -187,32 +234,69 @@ namespace adapter
     }
 
 
-
-    template <int dim, typename Number>
+    // Currently, port from precice forces to VectorType is missing
+    template <int dim, typename VectorType>
     void
-    CouplingFunctions<dim, Number>::advance_precice()
-    {}
+    CouplingFunctions<dim, VectorType>::advance_precice(
+      const VectorType &coupling_data,
+      const double      computedTimestepLength)
+    {
+      if (precice.isWriteDataRequired(computedTimestepLength))
+        {
+          extract_relevant_displacements(coupling_data);
+          precice.writeBlockVectorData(displacements_data_id,
+                                       n_interface_nodes,
+                                       interface_nodes_ids.data(),
+                                       precice_displacements.data());
+        }
+
+      precice.advance(computedTimestepLength);
+
+      if (precice.isReadDataAvailable())
+        {
+          precice.readBlockVectorData(forces_data_id,
+                                      n_interface_nodes,
+                                      interface_nodes_ids.data(),
+                                      precice_forces.data());
+        }
+    }
 
 
-
-    template <int dim, typename Number>
+    // TODO: Check this again, especially operator[] for BlockVectors
+    template <int dim, typename VectorType>
     void
-    CouplingFunctions<dim, Number>::extract_relevant_displacements()
-    {}
+    CouplingFunctions<dim, VectorType>::extract_relevant_displacements(
+      const VectorType &coupling_data)
+    {
+      int data_iterator = 0;
+      for (auto element = coupling_dofs.begin(); element != coupling_dofs.end();
+           ++element)
+        {
+          precice_displacements[data_iterator] = coupling_data[*element];
+
+          ++data_iterator;
+        }
+    }
 
 
-
-    template <int dim, typename Number>
+    // TODO: What about time? Maybe add an additional container
+    template <int dim, typename VectorType>
     void
-    CouplingFunctions<dim, Number>::save_old_state()
-    {}
+    CouplingFunctions<dim, VectorType>::save_old_state(
+      const std::vector<VectorType> &state_variables)
+    {
+      old_state_data = state_variables;
+    }
 
 
 
-    template <int dim, typename Number>
+    template <int dim, typename VectorType>
     void
-    CouplingFunctions<dim, Number>::reload_old_state()
-    {}
+    CouplingFunctions<dim, VectorType>::reload_old_state(
+      std::vector<VectorType> &state_variables) const
+    {
+      state_variables = old_state_data;
+    }
   } // namespace PreciceDealCoupling
 } // namespace adapter
 

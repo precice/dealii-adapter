@@ -423,7 +423,8 @@ namespace adapter
     // container for data exchange with precice
     BlockVector<double> external_stress;
 
-    PreciceDealCoupling::CouplingFunctions<dim> coupling_functions;
+    PreciceDealCoupling::CouplingFunctions<dim, BlockVector<double>>
+      coupling_functions;
 
     struct Errors
     {
