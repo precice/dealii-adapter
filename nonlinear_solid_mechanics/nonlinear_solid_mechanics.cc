@@ -438,10 +438,10 @@ namespace adapter
         u = 1.0;
       }
       void
-      normalise(const Errors &rhs)
+      normalise(const Errors &val)
       {
-        if (rhs.u != 0.0)
-          u /= rhs.u;
+        if (val.u != 0.0)
+          u /= val.u;
       }
 
       double u;
@@ -504,12 +504,22 @@ namespace adapter
     output_results();
     time.increment();
 
-    coupling_functions.initialize_precice(dof_handler_ref);
+    coupling_functions.initialize_precice(dof_handler_ref,
+                                          total_displacement,
+                                          external_stress);
 
+    // Define alias
+    std::vector<BlockVector<NumberType>> state_variables(
+      {&total_displacement, &total_displacement_old});
     BlockVector<NumberType> solution_delta(dofs_per_block);
-    while (time.current() <= time.end())
+    while ((time.current() <= time.end()) &&
+           coupling_functions.precice.isCouplingOngoing())
       {
         solution_delta = 0.0;
+
+        // TODO: Place it right and check expected behavior of the state
+        // variables
+        coupling_functions.save_current_state(state_variables);
 
         solve_nonlinear_timestep(solution_delta);
         total_displacement += solution_delta;
@@ -521,8 +531,16 @@ namespace adapter
         if (time.get_timestep() % parameters.output_interval == 0)
           output_results();
 
+        coupling_functions.advance_precice(total_displacement,
+                                           external_stress,
+                                           time.get_delta_t());
+        // TODO: Place them right
+        coupling_functions.reload_old_state(state_variables);
+
         time.increment();
       }
+
+    coupling_functions.precice.finalize();
   }
 
 
@@ -559,9 +577,9 @@ namespace adapter
 
 
     // Cell iterator for boundary conditions
-    const unsigned int clamped_boundary_id    = 1;
-    const unsigned int do_nothing_boundary_id = 2;
-    const unsigned int neumann_boundary_id    = parameters.interface_mesh_id;
+    const unsigned int clamped_boundary_id = 1;
+    //    const unsigned int do_nothing_boundary_id = 2;
+    const unsigned int neumann_boundary_id = parameters.interface_mesh_id;
 
     typename Triangulation<dim>::active_cell_iterator cell = triangulation
                                                                .begin_active(),
@@ -575,9 +593,8 @@ namespace adapter
             if (cell->face(face)->boundary_id() == id_flap_short_bottom)
               cell->face(face)->set_boundary_id(clamped_boundary_id);
             else if (cell->face(face)->boundary_id() == id_flap_long_bottom ||
-                     cell->face(face)->boundary_id() == id_flap_long_top)
-              cell->face(face)->set_boundary_id(do_nothing_boundary_id);
-            else if (cell->face(face)->boundary_id() == id_flap_short_top)
+                     cell->face(face)->boundary_id() == id_flap_long_top ||
+                     cell->face(face)->boundary_id() == id_flap_short_top)
               cell->face(face)->set_boundary_id(neumann_boundary_id);
             else
               AssertThrow(false,
@@ -788,6 +805,9 @@ namespace adapter
   void
   Solid<dim, NumberType>::print_conv_footer()
   {
+    error_residual.normalise(error_residual_0);
+    error_update.normalise(error_update_0);
+
     static const unsigned int l_width = 87;
 
     for (unsigned int i = 0; i < l_width; ++i)
@@ -795,10 +815,8 @@ namespace adapter
     std::cout << std::endl;
 
     std::cout << "Relative errors:" << std::endl
-              << "Displacement:\t" << error_update.u / error_update_0.u
-              << std::endl
-              << "Force: \t\t" << error_residual.u / error_residual_0.u
-              << std::endl
+              << "Displacement:\t" << error_update.u << std::endl
+              << "Residual: \t\t" << error_residual.u << std::endl
               << "v / V_0:\t" << vol_current << " / " << vol_reference
               << std::endl;
   }
@@ -1189,7 +1207,7 @@ namespace adapter
             scratch.shape_value[q_point];
 
           // Define const force vector for gravity
-          const Tensor<1, dim> body_force({0, -2. * rho});
+          const Tensor<1, dim> body_force({0, 0. * rho});
 
           for (unsigned int i = 0; i < dofs_per_cell; ++i)
             {

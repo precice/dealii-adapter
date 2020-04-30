@@ -32,26 +32,33 @@ namespace adapter
       CouplingFunctions(const Parameters::AllParameters &parameters);
 
       /**
-       * @brief     Initializes preCICE and passes all relevant data to preCICE
+       * @brief      Initializes preCICE and passes all relevant data to preCICE
        *
-       * @param[in] dof_handler Initialized dof_handler
-       * @param[in] coupling_data Data, which should be given to preCICE and
-       *            exchanged with other participants. If this data is
-       *            required already in the beginning depends on your individual
-       *            configuration and preCICE determines it automatically.
-       *            In many cases, this data will just represent your initial
-       *            condition.
+       * @param[in]  dof_handler Initialized dof_handler
+       * @param[in]  deal_to_precice Data, which should be given to preCICE and
+       *             exchanged with other participants. Weather this data is
+       *             required already in the beginning depends on your
+       *             individual configuration and preCICE determines it
+       *             automatically. In many cases, this data will just represent
+       *             your initial condition.
+       * @param[out] precice_to_deal
        */
       void
       initialize_precice(const DoFHandler<dim> &dof_handler,
-                         const VectorType &     coupling_data);
+                         const VectorType &     deal_to_precice,
+                         VectorType &           precice_to_deal);
 
+      /**
+       * @brief      advance_precice
+       *
+       * @param[in]  deal_to_precice
+       * @param[out] precice_to_deal
+       * @param[in]  computedTimestepLength
+       */
       void
-      advance_precice(const VectorType &coupling_data,
+      advance_precice(const VectorType &deal_to_precice,
+                      VectorType &      precice_to_deal,
                       const double      computedTimestepLength);
-
-      void
-      extract_relevant_displacements(const VectorType &coupling_data);
 
       /**
        * @brief      Saves time dependent variables in case of an implicit coupling
@@ -64,7 +71,7 @@ namespace adapter
        *             both functions.
        */
       void
-      save_old_state(const std::vector<VectorType> &state_variables);
+      save_current_state(const std::vector<VectorType> &state_variables);
 
       /**
        * @brief      Reloads the previously stored variables in case of an implicit
@@ -73,38 +80,45 @@ namespace adapter
        * @param[out] state_variables vector containing all variables to reload
        *
        * @note       This function only makes sense, if the state variables have been
-       *             stored by calling @p save_old_state. Therefore, the order, in
+       *             stored by calling @p save_current_state. Therefore, the order, in
        *             which the variables are passed into the vector must be the
-       * same for both functions.
+       *             same for both functions.
        */
       void
-      reload_old_state(std::vector<VectorType> &state_variables) const;
+      reload_old_state(std::vector<VectorType> &state_variables);
 
+      /**
+       * @brief public precice solverinterface
+       */
+
+      precice::SolverInterface precice;
 
     private:
       // preCICE related initializations
       const unsigned int deal_boundary_id;
       const bool         enable_precice;
-      const std::string  config_file;
-      const std::string  participant;
       const std::string  mesh_name;
       const std::string  read_data_name;
       const std::string  write_data_name;
 
       int precice_mesh_id;
       int n_interface_nodes;
-      int forces_data_id;
-      int displacements_data_id;
-
-      precice::SolverInterface precice;
+      int ptd_data_id;
+      int dtp_data_id;
 
       IndexSet coupling_dofs;
 
       std::vector<int>    interface_nodes_ids;
-      std::vector<double> precice_forces;
-      std::vector<double> precice_displacements;
+      std::vector<double> precice_ptd;
+      std::vector<double> precice_dtp;
 
       std::vector<VectorType> old_state_data;
+
+      void
+      format_deal_to_precice(const VectorType &deal_to_precice);
+
+      void
+      format_precice_to_deal(VectorType &precice_to_deal) const;
     };
 
 
@@ -112,17 +126,15 @@ namespace adapter
     template <int dim, typename VectorType>
     CouplingFunctions<dim, VectorType>::CouplingFunctions(
       const Parameters::AllParameters &parameters)
-      : deal_boundary_id(parameters.interface_mesh_id)
+      : precice(parameters.participant,
+                parameters.config_file,
+                Utilities::MPI::this_mpi_process(MPI_COMM_WORLD),
+                Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD))
+      , deal_boundary_id(parameters.interface_mesh_id)
       , enable_precice(parameters.enable_precice)
-      , config_file(parameters.config_file)
-      , participant(parameters.participant)
       , mesh_name(parameters.mesh_name)
       , read_data_name(parameters.read_data_name)
       , write_data_name(parameters.write_data_name)
-      , precice(participant,
-                config_file,
-                Utilities::MPI::this_mpi_process(MPI_COMM_WORLD),
-                Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD))
     {}
 
 
@@ -131,16 +143,16 @@ namespace adapter
     void
     CouplingFunctions<dim, VectorType>::initialize_precice(
       const DoFHandler<dim> &dof_handler,
-      const VectorType &     coupling_data)
+      const VectorType &     deal_to_precice,
+      VectorType &           precice_to_deal)
     {
       Assert(dim == precice.getDimensions(),
              ExcDimensionMismatch(dim, precice.getDimensions()));
 
       // get precice specific IDs from precice
       precice_mesh_id = precice.getMeshID(mesh_name);
-      forces_data_id  = precice.getDataID(read_data_name, precice_mesh_id);
-      displacements_data_id =
-        precice.getDataID(write_data_name, precice_mesh_id);
+      ptd_data_id     = precice.getDataID(read_data_name, precice_mesh_id);
+      dtp_data_id     = precice.getDataID(write_data_name, precice_mesh_id);
 
 
       // get the number of interface nodes from deal.ii
@@ -159,11 +171,11 @@ namespace adapter
 
       std::vector<double> interface_nodes_positions(dim * n_interface_nodes);
 
-      precice_displacements.resize(dim * n_interface_nodes);
+      precice_dtp.resize(dim * n_interface_nodes);
       interface_nodes_ids.resize(n_interface_nodes);
 
       // number of coupling faces already obtained in the make_grid function
-      precice_forces.resize(dim * n_interface_nodes);
+      precice_ptd.resize(dim * n_interface_nodes);
 
       // get the coordinates of the interface nodes from deal.ii
       std::map<types::global_dof_index, Point<dim>> support_points;
@@ -211,13 +223,13 @@ namespace adapter
       if (precice.isActionRequired(
             precice::constants::actionWriteInitialData()))
         {
-          // store initial write_data for precice in precice_displacements
-          extract_relevant_displacements(coupling_data);
+          // store initial write_data for precice in precice_dtp
+          format_deal_to_precice(deal_to_precice);
 
-          precice.writeBlockVectorData(displacements_data_id,
+          precice.writeBlockVectorData(dtp_data_id,
                                        n_interface_nodes,
                                        interface_nodes_ids.data(),
-                                       precice_displacements.data());
+                                       precice_dtp.data());
 
           precice.markActionFulfilled(
             precice::constants::actionWriteInitialData());
@@ -227,10 +239,14 @@ namespace adapter
 
       // read initial readData from preCICE for the first time step
       if (precice.isReadDataAvailable())
-        precice.readBlockVectorData(forces_data_id,
-                                    n_interface_nodes,
-                                    interface_nodes_ids.data(),
-                                    precice_forces.data());
+        {
+          precice.readBlockVectorData(ptd_data_id,
+                                      n_interface_nodes,
+                                      interface_nodes_ids.data(),
+                                      precice_ptd.data());
+
+          format_precice_to_deal(precice_to_deal);
+        }
     }
 
 
@@ -238,26 +254,29 @@ namespace adapter
     template <int dim, typename VectorType>
     void
     CouplingFunctions<dim, VectorType>::advance_precice(
-      const VectorType &coupling_data,
+      const VectorType &deal_to_precice,
+      VectorType &      precice_to_deal,
       const double      computedTimestepLength)
     {
       if (precice.isWriteDataRequired(computedTimestepLength))
         {
-          extract_relevant_displacements(coupling_data);
-          precice.writeBlockVectorData(displacements_data_id,
+          format_deal_to_precice(deal_to_precice);
+          precice.writeBlockVectorData(dtp_data_id,
                                        n_interface_nodes,
                                        interface_nodes_ids.data(),
-                                       precice_displacements.data());
+                                       precice_dtp.data());
         }
 
       precice.advance(computedTimestepLength);
 
       if (precice.isReadDataAvailable())
         {
-          precice.readBlockVectorData(forces_data_id,
+          precice.readBlockVectorData(ptd_data_id,
                                       n_interface_nodes,
                                       interface_nodes_ids.data(),
-                                      precice_forces.data());
+                                      precice_ptd.data());
+
+          format_precice_to_deal(precice_to_deal);
         }
     }
 
@@ -265,27 +284,53 @@ namespace adapter
     // TODO: Check this again, especially operator[] for BlockVectors
     template <int dim, typename VectorType>
     void
-    CouplingFunctions<dim, VectorType>::extract_relevant_displacements(
-      const VectorType &coupling_data)
+    CouplingFunctions<dim, VectorType>::format_deal_to_precice(
+      const VectorType &deal_to_precice)
     {
       int data_iterator = 0;
       for (auto element = coupling_dofs.begin(); element != coupling_dofs.end();
            ++element)
         {
-          precice_displacements[data_iterator] = coupling_data[*element];
+          precice_dtp[data_iterator] = deal_to_precice[*element];
 
           ++data_iterator;
         }
     }
 
 
+
+    // TODO: Check this again, especially operator[] for BlockVectors
+    template <int dim, typename VectorType>
+    void
+    CouplingFunctions<dim, VectorType>::format_precice_to_deal(
+      VectorType &precice_to_deal) const
+    {
+      int data_iterator = 0;
+      for (auto element = coupling_dofs.begin(); element != coupling_dofs.end();
+           ++element)
+        {
+          precice_to_deal[*element] = precice_dtp[data_iterator];
+
+          ++data_iterator;
+        }
+    }
+
+
+
     // TODO: What about time? Maybe add an additional container
     template <int dim, typename VectorType>
     void
-    CouplingFunctions<dim, VectorType>::save_old_state(
+    CouplingFunctions<dim, VectorType>::save_current_state(
       const std::vector<VectorType> &state_variables)
     {
-      old_state_data = state_variables;
+      if (precice.isActionRequired(
+            precice::constants::actionWriteIterationCheckpoint()))
+        {
+          old_state_data = state_variables;
+
+          precice.markActionFulfilled(
+            precice::constants::actionWriteIterationCheckpoint());
+        }
     }
 
 
@@ -293,9 +338,16 @@ namespace adapter
     template <int dim, typename VectorType>
     void
     CouplingFunctions<dim, VectorType>::reload_old_state(
-      std::vector<VectorType> &state_variables) const
+      std::vector<VectorType> &state_variables)
     {
-      state_variables = old_state_data;
+      if (precice.isActionRequired(
+            precice::constants::actionReadIterationCheckpoint()))
+        {
+          state_variables = old_state_data;
+
+          precice.markActionFulfilled(
+            precice::constants::actionReadIterationCheckpoint());
+        }
     }
   } // namespace PreciceDealCoupling
 } // namespace adapter
