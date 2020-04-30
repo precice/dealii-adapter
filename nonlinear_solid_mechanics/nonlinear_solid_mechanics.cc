@@ -816,7 +816,7 @@ namespace adapter
 
     std::cout << "Relative errors:" << std::endl
               << "Displacement:\t" << error_update.u << std::endl
-              << "Residual: \t\t" << error_residual.u << std::endl
+              << "Residual: \t" << error_residual.u << std::endl
               << "v / V_0:\t" << vol_current << " / " << vol_reference
               << std::endl;
   }
@@ -1440,10 +1440,11 @@ namespace adapter
   Solid<dim, NumberType>::output_results() const
   {
     DataOut<dim> data_out;
-    // TODO: Discuss this as an option
-    //    DataOutBase::VtkFlags flags;
-    //    flags.write_higher_order_cells = true;
-    //    data_out.set_flags(flags);
+
+    // Note: There is at least paraView v 5.5 needed to visualize this output
+    DataOutBase::VtkFlags flags;
+    flags.write_higher_order_cells = true;
+    data_out.set_flags(flags);
 
     std::vector<DataComponentInterpretation::DataComponentInterpretation>
       data_component_interpretation(
