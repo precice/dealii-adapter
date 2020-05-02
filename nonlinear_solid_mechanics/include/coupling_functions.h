@@ -12,6 +12,7 @@
 #include <precice/SolverInterface.hpp>
 
 #include "parameter_handling.h"
+#include "time.h"
 
 namespace adapter
 {
@@ -69,9 +70,14 @@ namespace adapter
        *             @p reload_old_state. Therefore, the order, in which the
        *             variables are passed into the vector must be the same for
        *             both functions.
+       * @note       The absolute time has no impact on the computation, but on the output.
+       *             Therefore, we call here in the @p Time class a method to store the
+       *             current time and reload it later. This is necessary for
+       *             subcycling.
        */
       void
-      save_current_state(const std::vector<VectorType> &state_variables);
+      save_current_state(const std::vector<VectorType *> &state_variables,
+                         Time &                           time_class);
 
       /**
        * @brief      Reloads the previously stored variables in case of an implicit
@@ -85,7 +91,8 @@ namespace adapter
        *             same for both functions.
        */
       void
-      reload_old_state(std::vector<VectorType> &state_variables);
+      reload_old_state(std::vector<VectorType *> &state_variables,
+                       Time &                     time_class);
 
       /**
        * @brief public precice solverinterface
@@ -113,6 +120,7 @@ namespace adapter
       std::vector<double> precice_dtp;
 
       std::vector<VectorType> old_state_data;
+      double                  old_time_value;
 
       void
       format_deal_to_precice(const VectorType &deal_to_precice);
@@ -250,7 +258,7 @@ namespace adapter
     }
 
 
-    // Currently, port from precice forces to VectorType is missing
+
     template <int dim, typename VectorType>
     void
     CouplingFunctions<dim, VectorType>::advance_precice(
@@ -317,16 +325,19 @@ namespace adapter
 
 
 
-    // TODO: What about time? Maybe add an additional container
     template <int dim, typename VectorType>
     void
     CouplingFunctions<dim, VectorType>::save_current_state(
-      const std::vector<VectorType> &state_variables)
+      const std::vector<VectorType *> &state_variables,
+      Time &                           time_class)
     {
       if (precice.isActionRequired(
             precice::constants::actionWriteIterationCheckpoint()))
         {
-          old_state_data = state_variables;
+          for (uint i = 0; i < state_variables.size(); ++i)
+            old_state_data[i] = *(state_variables[i]);
+
+          old_time_value = time_class.current();
 
           precice.markActionFulfilled(
             precice::constants::actionWriteIterationCheckpoint());
@@ -338,12 +349,16 @@ namespace adapter
     template <int dim, typename VectorType>
     void
     CouplingFunctions<dim, VectorType>::reload_old_state(
-      std::vector<VectorType> &state_variables)
+      std::vector<VectorType *> &state_variables,
+      Time &                     time_class)
     {
       if (precice.isActionRequired(
             precice::constants::actionReadIterationCheckpoint()))
         {
-          state_variables = old_state_data;
+          for (uint i = 0; i < state_variables.size(); ++i)
+            *(state_variables[i]) = old_state_data[i];
+
+          time_class.set_absolute_time(old_time_value);
 
           precice.markActionFulfilled(
             precice::constants::actionReadIterationCheckpoint());

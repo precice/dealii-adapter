@@ -67,61 +67,12 @@
 
 #include "include/coupling_functions.h"
 #include "include/parameter_handling.h"
+#include "include/time.h"
 #include "precice/SolverInterface.hpp"
-
-
 
 namespace adapter
 {
   using namespace dealii;
-
-  class Time
-  {
-  public:
-    Time(const double time_end, const double delta_t)
-      : timestep(0)
-      , time_current(0.0)
-      , time_end(time_end)
-      , delta_t(delta_t)
-    {}
-
-    virtual ~Time()
-    {}
-
-    double
-    current() const
-    {
-      return time_current;
-    }
-    double
-    end() const
-    {
-      return time_end;
-    }
-    double
-    get_delta_t() const
-    {
-      return delta_t;
-    }
-    unsigned int
-    get_timestep() const
-    {
-      return timestep;
-    }
-    void
-    increment()
-    {
-      time_current += delta_t;
-      ++timestep;
-    }
-
-  private:
-    unsigned int timestep;
-    double       time_current;
-    const double time_end;
-    const double delta_t;
-  };
-
 
   template <int dim, typename NumberType>
   class Material_Compressible_Neo_Hook_One_Field
@@ -399,6 +350,7 @@ namespace adapter
     const unsigned int    n_q_points_f;
 
     // Newmark parameters
+    // Coefficients, which are needed for time dependencies
     const double alpha_1 =
       1. / (parameters.beta * std::pow(parameters.delta_t, 2));
     const double alpha_2 = 1. / (parameters.beta * parameters.delta_t);
@@ -419,6 +371,9 @@ namespace adapter
     BlockVector<double>       velocity_old;
     BlockVector<double>       acceleration;
     BlockVector<double>       acceleration_old;
+
+    // Alias
+    std::vector<BlockVector<double> *> state_variables;
 
     // container for data exchange with precice
     BlockVector<double> external_stress;
@@ -508,9 +463,7 @@ namespace adapter
                                           total_displacement,
                                           external_stress);
 
-    // Define alias
-    std::vector<BlockVector<NumberType>> state_variables(
-      {&total_displacement, &total_displacement_old});
+
     BlockVector<NumberType> solution_delta(dofs_per_block);
     while ((time.current() <= time.end()) &&
            coupling_functions.precice.isCouplingOngoing())
@@ -519,7 +472,7 @@ namespace adapter
 
         // TODO: Place it right and check expected behavior of the state
         // variables
-        coupling_functions.save_current_state(state_variables);
+        coupling_functions.save_current_state(state_variables, time);
 
         solve_nonlinear_timestep(solution_delta);
         total_displacement += solution_delta;
@@ -528,14 +481,15 @@ namespace adapter
         update_velocity(solution_delta);
         update_old_variables();
 
-        if (time.get_timestep() % parameters.output_interval == 0)
-          output_results();
-
         coupling_functions.advance_precice(total_displacement,
                                            external_stress,
                                            time.get_delta_t());
-        // TODO: Place them right
-        coupling_functions.reload_old_state(state_variables);
+
+        coupling_functions.reload_old_state(state_variables, time);
+
+        if (coupling_functions.precice.isTimeWindowComplete() &&
+            time.get_timestep() % parameters.output_interval == 0)
+          output_results();
 
         time.increment();
       }
@@ -665,8 +619,15 @@ namespace adapter
     // TODO: Estimate acc properly in case of body forces
     acceleration.reinit(total_displacement);
     acceleration_old.reinit(total_displacement);
-
     external_stress.reinit(total_displacement);
+
+    // Alias
+    state_variables = std::vector({&total_displacement,
+                                   &total_displacement_old,
+                                   &velocity,
+                                   &velocity_old,
+                                   &acceleration,
+                                   &acceleration_old});
 
     setup_qph();
 
@@ -728,6 +689,7 @@ namespace adapter
 
         make_constraints(newton_iteration);
         update_acceleration(solution_delta);
+
         assemble_system(solution_delta, acceleration, external_stress);
 
         // Residual error = rhs error
@@ -1206,6 +1168,7 @@ namespace adapter
           const std::vector<Tensor<1, dim, NumberType>> &shape_value =
             scratch.shape_value[q_point];
 
+          // TODO: Add to parameter file
           // Define const force vector for gravity
           const Tensor<1, dim> body_force({0, 0. * rho});
 
