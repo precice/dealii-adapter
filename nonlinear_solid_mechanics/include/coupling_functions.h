@@ -50,7 +50,8 @@ namespace adapter
                          VectorType &           precice_to_deal);
 
       /**
-       * @brief      Advances preCICE after every timestep, converts data formats between preCICE and dealii
+       * @brief      Advances preCICE after every timestep, converts data formats
+       *             between preCICE and dealii
        *
        * @param[in]  deal_to_precice
        * @param[out] precice_to_deal
@@ -134,7 +135,7 @@ namespace adapter
     template <int dim, typename VectorType>
     CouplingFunctions<dim, VectorType>::CouplingFunctions(
       const Parameters::AllParameters &parameters)
-      : precice(parameters.participant,
+      : precice(parameters.participant_name,
                 parameters.config_file,
                 Utilities::MPI::this_mpi_process(MPI_COMM_WORLD),
                 Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD))

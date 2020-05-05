@@ -293,7 +293,7 @@ namespace adapter
 
 
     void
-    PreciceConfiguration::declare_parameters(ParameterHandler &prm)
+    PreciceAdapterConfiguration::declare_parameters(ParameterHandler &prm)
     {
       prm.enter_subsection("precice configuration");
       {
@@ -311,7 +311,7 @@ namespace adapter
                           Patterns::Anything(),
                           "Name of the precice configuration file");
         prm.declare_entry(
-          "Participant",
+          "Participant name",
           "dealiisolver",
           Patterns::Anything(),
           "Name of the participant in the precice-config.xml file");
@@ -340,14 +340,14 @@ namespace adapter
     }
 
     void
-    PreciceConfiguration::parse_parameters(ParameterHandler &prm)
+    PreciceAdapterConfiguration::parse_parameters(ParameterHandler &prm)
     {
       prm.enter_subsection("precice configuration");
       {
         scenario          = prm.get("Scenario");
         enable_precice    = prm.get_bool("Enable precice");
         config_file       = prm.get("precice config-file");
-        participant       = prm.get("Participant");
+        participant_name  = prm.get("Participant name");
         mesh_name         = prm.get("Mesh name");
         read_data_name    = prm.get("Read data name");
         write_data_name   = prm.get("Write data name");
@@ -364,7 +364,7 @@ namespace adapter
                            public NonlinearSolver,
                            public Time,
                            public NewmarkParameters,
-                           public PreciceConfiguration
+                           public PreciceAdapterConfiguration
 
     {
       AllParameters(const std::string &input_file);
@@ -397,7 +397,7 @@ namespace adapter
       NonlinearSolver::declare_parameters(prm);
       Time::declare_parameters(prm);
       NewmarkParameters::declare_parameters(prm);
-      PreciceConfiguration::declare_parameters(prm);
+      PreciceAdapterConfiguration::declare_parameters(prm);
     }
 
     void
@@ -409,7 +409,7 @@ namespace adapter
       NonlinearSolver::parse_parameters(prm);
       Time::parse_parameters(prm);
       NewmarkParameters::parse_parameters(prm);
-      PreciceConfiguration::parse_parameters(prm);
+      PreciceAdapterConfiguration::parse_parameters(prm);
     }
   } // namespace Parameters
 } // namespace adapter
