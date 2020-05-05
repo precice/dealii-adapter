@@ -502,19 +502,44 @@ namespace adapter
   void
   Solid<dim, NumberType>::make_grid()
   {
-    const Point<dim> point_bottom =
-      dim == 3 ? Point<dim>(0.24899, 0.19, -0.005) : Point<dim>(0.24899, 0.19);
-    const Point<dim> point_tip =
-      dim == 3 ? Point<dim>(0.6, 0.21, 0.005) : Point<dim>(0.6, 0.21);
+    const std::string testcase("PF");
 
-    // IDs for FSI3/CSM2
-    const unsigned int id_flap_long_bottom  = 2; // x direction
-    const unsigned int id_flap_long_top     = 3;
-    const unsigned int id_flap_short_bottom = 0; // y direction
-    const unsigned int id_flap_short_top    = 1;
+    Point<dim>   point_bottom, point_tip;
+    unsigned int id_flap_long_bottom, id_flap_long_top, id_flap_short_bottom,
+      id_flap_short_top, n_x, n_y;
 
-    const unsigned int        n_x = 25;
-    const unsigned int        n_y = 2;
+    if (testcase == "PF")
+      { // flap_perp
+        point_bottom =
+          dim == 3 ? Point<dim>(-0.05, 0, 0) : Point<dim>(-0.05, 0);
+        point_tip = dim == 3 ? Point<dim>(0.05, 1, 0.3) : Point<dim>(0.05, 1);
+
+        // IDs for PF
+        id_flap_long_bottom  = 0; // x direction
+        id_flap_long_top     = 1;
+        id_flap_short_bottom = 2; // y direction
+        id_flap_short_top    = 3;
+
+        n_x = 5;
+        n_y = 30;
+      }
+    else if (testcase == "FSI3")
+      {
+        point_bottom = dim == 3 ? Point<dim>(0.24899, 0.19, -0.005) :
+                                  Point<dim>(0.24899, 0.19);
+        point_tip =
+          dim == 3 ? Point<dim>(0.6, 0.21, 0.005) : Point<dim>(0.6, 0.21);
+
+        // IDs for FSI3/CSM2
+        id_flap_long_bottom  = 2; // x direction
+        id_flap_long_top     = 3;
+        id_flap_short_bottom = 0; // y direction
+        id_flap_short_top    = 1;
+
+        n_x = 25;
+        n_y = 2;
+      }
+
     std::vector<unsigned int> repetitions({n_x, n_y});
 
     GridGenerator::subdivided_hyper_rectangle(triangulation,
