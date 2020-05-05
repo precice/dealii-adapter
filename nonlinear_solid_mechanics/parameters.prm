@@ -73,7 +73,7 @@ subsection precice configuration
     set Participant         = Solid
 
     # Name of the coupling mesh in the precice-config.xml file
-    set Mesh name            = Solid_nodes
+    set Mesh name           = Solid_nodes
 
     # Name of the read data in the precice-config.xml file
     set Read data name      = Force

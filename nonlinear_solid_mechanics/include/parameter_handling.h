@@ -273,12 +273,12 @@ namespace adapter
 
 
 
-    struct PreciceConfiguration
+    struct PreciceAdapterConfiguration
     {
       std::string  scenario;
       bool         enable_precice;
       std::string  config_file;
-      std::string  participant;
+      std::string  participant_name;
       std::string  mesh_name;
       std::string  read_data_name;
       std::string  write_data_name;

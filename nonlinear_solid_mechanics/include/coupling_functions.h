@@ -37,7 +37,7 @@ namespace adapter
        *
        * @param[in]  dof_handler Initialized dof_handler
        * @param[in]  deal_to_precice Data, which should be given to preCICE and
-       *             exchanged with other participants. Weather this data is
+       *             exchanged with other participants. Wether this data is
        *             required already in the beginning depends on your
        *             individual configuration and preCICE determines it
        *             automatically. In many cases, this data will just represent
@@ -50,7 +50,7 @@ namespace adapter
                          VectorType &           precice_to_deal);
 
       /**
-       * @brief      advance_precice
+       * @brief      Advances preCICE after every timestep, converts data formats between preCICE and dealii
        *
        * @param[in]  deal_to_precice
        * @param[out] precice_to_deal

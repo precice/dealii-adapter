@@ -465,8 +465,7 @@ namespace adapter
 
 
     BlockVector<NumberType> solution_delta(dofs_per_block);
-    while ((time.current() <= time.end()) &&
-           coupling_functions.precice.isCouplingOngoing())
+    while (coupling_functions.precice.isCouplingOngoing())
       {
         solution_delta = 0.0;
 
