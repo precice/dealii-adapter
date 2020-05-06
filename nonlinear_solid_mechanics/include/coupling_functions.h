@@ -328,6 +328,8 @@ namespace adapter
       if (precice.isActionRequired(
             precice::constants::actionWriteIterationCheckpoint()))
         {
+          old_state_data.resize(state_variables.size());
+
           for (uint i = 0; i < state_variables.size(); ++i)
             old_state_data[i] = *(state_variables[i]);
 
@@ -349,6 +351,10 @@ namespace adapter
       if (precice.isActionRequired(
             precice::constants::actionReadIterationCheckpoint()))
         {
+          Assert(state_variables.size() == old_state_data.size(),
+                 ExcMessage(
+                   "state_variables are not the same as previously saved."));
+
           for (uint i = 0; i < state_variables.size(); ++i)
             *(state_variables[i]) = old_state_data[i];
 
