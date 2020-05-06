@@ -60,7 +60,7 @@ namespace adapter
       void
       advance_precice(const VectorType &deal_to_precice,
                       VectorType &      precice_to_deal,
-                      const double      computedTimestepLength);
+                      const double      computed_timestep_length);
 
       /**
        * @brief      Saves time dependent variables in case of an implicit coupling
@@ -68,7 +68,7 @@ namespace adapter
        * @param[in]  state_variables vector containing all variables to store
        *
        * @note       This function only makes sense, if it is used with
-       *             @p reload_old_state. Therefore, the order, in which the
+       *             @p reload_old_state_if_required. Therefore, the order, in which the
        *             variables are passed into the vector must be the same for
        *             both functions.
        * @note       The absolute time has no impact on the computation, but on the output.
@@ -77,8 +77,9 @@ namespace adapter
        *             subcycling.
        */
       void
-      save_current_state(const std::vector<VectorType *> &state_variables,
-                         Time &                           time_class);
+      save_current_state_if_required(
+        const std::vector<VectorType *> &state_variables,
+        Time &                           time_class);
 
       /**
        * @brief      Reloads the previously stored variables in case of an implicit
@@ -87,13 +88,13 @@ namespace adapter
        * @param[out] state_variables vector containing all variables to reload
        *
        * @note       This function only makes sense, if the state variables have been
-       *             stored by calling @p save_current_state. Therefore, the order, in
+       *             stored by calling @p save_current_state_if_required. Therefore, the order, in
        *             which the variables are passed into the vector must be the
        *             same for both functions.
        */
       void
-      reload_old_state(std::vector<VectorType *> &state_variables,
-                       Time &                     time_class);
+      reload_old_state_if_required(std::vector<VectorType *> &state_variables,
+                                   Time &                     time_class);
 
       /**
        * @brief public precice solverinterface
@@ -263,9 +264,9 @@ namespace adapter
     CouplingFunctions<dim, VectorType>::advance_precice(
       const VectorType &deal_to_precice,
       VectorType &      precice_to_deal,
-      const double      computedTimestepLength)
+      const double      computed_timestep_length)
     {
-      if (precice.isWriteDataRequired(computedTimestepLength))
+      if (precice.isWriteDataRequired(computed_timestep_length))
         {
           format_deal_to_precice(deal_to_precice);
           precice.writeBlockVectorData(dtp_data_id,
@@ -274,7 +275,7 @@ namespace adapter
                                        precice_dtp.data());
         }
 
-      precice.advance(computedTimestepLength);
+      precice.advance(computed_timestep_length);
 
       if (precice.isReadDataAvailable())
         {
@@ -321,7 +322,7 @@ namespace adapter
 
     template <int dim, typename VectorType>
     void
-    CouplingFunctions<dim, VectorType>::save_current_state(
+    CouplingFunctions<dim, VectorType>::save_current_state_if_required(
       const std::vector<VectorType *> &state_variables,
       Time &                           time_class)
     {
@@ -344,7 +345,7 @@ namespace adapter
 
     template <int dim, typename VectorType>
     void
-    CouplingFunctions<dim, VectorType>::reload_old_state(
+    CouplingFunctions<dim, VectorType>::reload_old_state_if_required(
       std::vector<VectorType *> &state_variables,
       Time &                     time_class)
     {

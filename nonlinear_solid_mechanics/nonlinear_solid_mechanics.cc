@@ -469,9 +469,8 @@ namespace adapter
       {
         solution_delta = 0.0;
 
-        // TODO: Place it right and check expected behavior of the state
-        // variables
-        coupling_functions.save_current_state(state_variables, time);
+        coupling_functions.save_current_state_if_required(state_variables,
+                                                          time);
 
         solve_nonlinear_timestep(solution_delta);
         total_displacement += solution_delta;
@@ -485,7 +484,7 @@ namespace adapter
                                            time.get_delta_t());
         time.increment();
 
-        coupling_functions.reload_old_state(state_variables, time);
+        coupling_functions.reload_old_state_if_required(state_variables, time);
 
         if (coupling_functions.precice.isTimeWindowComplete() &&
             time.get_timestep() % parameters.output_interval == 0)
@@ -522,7 +521,7 @@ namespace adapter
         n_x = 5;
         n_y = 30;
       }
-    else if (testcase == "FSI3")
+    else // FSI3, don't use condition to avoid wmaybe unitialized warning
       {
         point_bottom = dim == 3 ? Point<dim>(0.24899, 0.19, -0.005) :
                                   Point<dim>(0.24899, 0.19);
