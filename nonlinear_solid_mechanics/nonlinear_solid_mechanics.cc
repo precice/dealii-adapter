@@ -483,14 +483,13 @@ namespace adapter
         coupling_functions.advance_precice(total_displacement,
                                            external_stress,
                                            time.get_delta_t());
+        time.increment();
 
         coupling_functions.reload_old_state(state_variables, time);
 
         if (coupling_functions.precice.isTimeWindowComplete() &&
             time.get_timestep() % parameters.output_interval == 0)
           output_results();
-
-        time.increment();
       }
 
     coupling_functions.precice.finalize();
