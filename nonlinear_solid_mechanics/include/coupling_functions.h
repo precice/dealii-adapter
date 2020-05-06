@@ -115,7 +115,8 @@ namespace adapter
       int ptd_data_id;
       int dtp_data_id;
 
-      IndexSet coupling_dofs;
+      IndexSet coupling_dofs_x_comp;
+      IndexSet coupling_dofs_y_comp;
 
       std::vector<int>    interface_nodes_ids;
       std::vector<double> precice_ptd;
@@ -169,12 +170,25 @@ namespace adapter
       std::set<types::boundary_id> couplingBoundary;
       couplingBoundary.insert(deal_boundary_id);
 
+      // Extract again, since vector valued FE
+      const FEValuesExtractors::Scalar x_displacement(0);
+
       DoFTools::extract_boundary_dofs(dof_handler,
-                                      ComponentMask(),
-                                      coupling_dofs,
+                                      dof_handler.get_fe().component_mask(
+                                        x_displacement),
+                                      coupling_dofs_x_comp,
                                       couplingBoundary);
 
-      n_interface_nodes = coupling_dofs.n_elements() / dim;
+      // Extract again, since vector valued FE
+      const FEValuesExtractors::Scalar y_displacement(1);
+
+      DoFTools::extract_boundary_dofs(dof_handler,
+                                      dof_handler.get_fe().component_mask(
+                                        y_displacement),
+                                      coupling_dofs_y_comp,
+                                      couplingBoundary);
+
+      n_interface_nodes = coupling_dofs_x_comp.n_elements();
 
       std::cout << "\t Number of coupling nodes:     " << n_interface_nodes
                 << std::endl;
@@ -182,10 +196,8 @@ namespace adapter
       std::vector<double> interface_nodes_positions(dim * n_interface_nodes);
 
       precice_dtp.resize(dim * n_interface_nodes);
-      interface_nodes_ids.resize(n_interface_nodes);
-
-      // number of coupling faces already obtained in the make_grid function
       precice_ptd.resize(dim * n_interface_nodes);
+      interface_nodes_ids.resize(n_interface_nodes);
 
       // get the coordinates of the interface nodes from deal.ii
       std::map<types::global_dof_index, Point<dim>> support_points;
@@ -195,18 +207,8 @@ namespace adapter
                                            support_points);
       // support_points contains now the coordinates of all dofs
       // in the next step, the relevant coordinates are extracted using the
-      // extracted coupling_dofs
-
-      // New set containing only once
-      IndexSet coupling_dofs_x_comp;
-      // Extract again, since vector valued FE
-      const FEValuesExtractors::Scalar x_displacement(0);
-
-      DoFTools::extract_boundary_dofs(dof_handler,
-                                      dof_handler.get_fe().component_mask(
-                                        x_displacement),
-                                      coupling_dofs_x_comp,
-                                      couplingBoundary);
+      // extracted coupling_dofs. Since we deal with a vector valued problem,
+      // an IndexSet holding one component is sufficient.
 
       int node_position_iterator = 0;
       for (auto element : coupling_dofs_x_comp)
@@ -295,11 +297,22 @@ namespace adapter
     CouplingFunctions<dim, VectorType>::format_deal_to_precice(
       const VectorType &deal_to_precice)
     {
-      int data_iterator = 0;
-      for (auto element : coupling_dofs)
+      // Assumption: x index is in the same position as y index in each IndexSet
+      // In general, higher order support points in the element are first
+      // ordered in the x component. An IndexSet for the first component might
+      // look like this: [1] [3456] [11] for a 7th order 1d interface/2d cell.
+      // Therefore, an index for the respective x component dof is not always
+      // followed by an index on the same position for the y component
+      // TODO: It works fine, but there might be a more elegant way to implement
+      // the iterator over both sets
+      auto x_comp = coupling_dofs_x_comp.begin();
+      auto y_comp = coupling_dofs_y_comp.begin();
+      for (int i = 0; i < n_interface_nodes; ++i)
         {
-          precice_dtp[data_iterator] = deal_to_precice[element];
-          ++data_iterator;
+          precice_dtp[2 * i]       = deal_to_precice[*x_comp];
+          precice_dtp[(2 * i) + 1] = deal_to_precice[*y_comp];
+          ++x_comp;
+          ++y_comp;
         }
     }
 
@@ -310,11 +323,14 @@ namespace adapter
     CouplingFunctions<dim, VectorType>::format_precice_to_deal(
       VectorType &precice_to_deal) const
     {
-      int data_iterator = 0;
-      for (auto element : coupling_dofs)
+      auto x_comp = coupling_dofs_x_comp.begin();
+      auto y_comp = coupling_dofs_y_comp.begin();
+      for (int i = 0; i < n_interface_nodes; ++i)
         {
-          precice_to_deal[element] = precice_ptd[data_iterator];
-          ++data_iterator;
+          precice_to_deal[*x_comp] = precice_ptd[2 * i];
+          precice_to_deal[*y_comp] = precice_ptd[(2 * i) + 1];
+          ++x_comp;
+          ++y_comp;
         }
     }
 
