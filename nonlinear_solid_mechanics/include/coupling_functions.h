@@ -208,13 +208,11 @@ namespace adapter
                                       couplingBoundary);
 
       int node_position_iterator = 0;
-      for (auto element = coupling_dofs_x_comp.begin();
-           element != coupling_dofs_x_comp.end();
-           ++element)
+      for (auto element : coupling_dofs_x_comp)
         {
-          for (int jj = 0; jj < dim; ++jj)
-            interface_nodes_positions[node_position_iterator * dim + jj] =
-              support_points[*element][jj];
+          for (int i = 0; i < dim; ++i)
+            interface_nodes_positions[node_position_iterator * dim + i] =
+              support_points[element][i];
 
           ++node_position_iterator;
         }
@@ -290,36 +288,31 @@ namespace adapter
     }
 
 
-    // TODO: Check this again, especially operator[] for BlockVectors
+
     template <int dim, typename VectorType>
     void
     CouplingFunctions<dim, VectorType>::format_deal_to_precice(
       const VectorType &deal_to_precice)
     {
       int data_iterator = 0;
-      for (auto element = coupling_dofs.begin(); element != coupling_dofs.end();
-           ++element)
+      for (auto element : coupling_dofs)
         {
-          precice_dtp[data_iterator] = deal_to_precice[*element];
-
+          precice_dtp[data_iterator] = deal_to_precice[element];
           ++data_iterator;
         }
     }
 
 
 
-    // TODO: Check this again, especially operator[] for BlockVectors
     template <int dim, typename VectorType>
     void
     CouplingFunctions<dim, VectorType>::format_precice_to_deal(
       VectorType &precice_to_deal) const
     {
       int data_iterator = 0;
-      for (auto element = coupling_dofs.begin(); element != coupling_dofs.end();
-           ++element)
+      for (auto element : coupling_dofs)
         {
-          precice_to_deal[*element] = precice_dtp[data_iterator];
-
+          precice_to_deal[element] = precice_ptd[data_iterator];
           ++data_iterator;
         }
     }
