@@ -67,6 +67,7 @@
 
 #include "include/coupling_functions.h"
 #include "include/parameter_handling.h"
+#include "include/postprocessor.h"
 #include "include/time.h"
 #include "precice/SolverInterface.hpp"
 
@@ -1432,23 +1433,17 @@ namespace Neo_Hook_Solid
     flags.write_higher_order_cells = true;
     data_out.set_flags(flags);
 
-    std::vector<DataComponentInterpretation::DataComponentInterpretation>
-      data_component_interpretation(
-        dim, DataComponentInterpretation::component_is_part_of_vector);
-
-    std::vector<std::string> solution_name(dim, "displacement");
-
     data_out.attach_dof_handler(dof_handler_ref);
-    data_out.add_data_vector(total_displacement,
-                             solution_name,
-                             DataOut<dim>::type_dof_data,
-                             data_component_interpretation);
+    Postprocessor<dim> postprocessor;
+    data_out.add_data_vector(total_displacement, postprocessor);
 
+    // To visualize everything on a displaced grid
     Vector<double> soln(total_displacement.size());
     for (unsigned int i = 0; i < soln.size(); ++i)
       soln(i) = total_displacement(i);
     MappingQEulerian<dim> q_mapping(degree, dof_handler_ref, soln);
-    data_out.build_patches(q_mapping, degree);
+
+    data_out.build_patches(q_mapping, degree, DataOut<dim>::curved_inner_cells);
 
     std::ostringstream filename;
     filename << "solution-" << time.get_timestep() / parameters.output_interval
