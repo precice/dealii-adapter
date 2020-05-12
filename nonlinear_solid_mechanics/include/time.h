@@ -3,7 +3,7 @@
 
 #include <deal.II/base/timer.h>
 
-namespace adapter
+namespace Adapter
 {
   using namespace dealii;
 
@@ -52,7 +52,7 @@ namespace adapter
     void
     set_absolute_time(const double new_time)
     {
-      timestep = new_time / delta_t;
+      timestep     = new_time / delta_t;
       time_current = new_time;
     }
 
@@ -69,5 +69,5 @@ namespace adapter
     const double time_end;
     const double delta_t;
   };
-} // namespace adapter
+} // namespace Adapter
 #endif // TIME_H

@@ -3,7 +3,7 @@
 
 #include <deal.II/base/parameter_handler.h>
 
-namespace adapter
+namespace Adapter
 {
   using namespace dealii;
 
@@ -412,6 +412,6 @@ namespace adapter
       PreciceAdapterConfiguration::parse_parameters(prm);
     }
   } // namespace Parameters
-} // namespace adapter
+} // namespace Adapter
 
 #endif

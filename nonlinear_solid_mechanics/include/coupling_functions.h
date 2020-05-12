@@ -14,7 +14,7 @@
 #include "parameter_handling.h"
 #include "time.h"
 
-namespace adapter
+namespace Adapter
 {
   using namespace dealii;
 
@@ -382,6 +382,6 @@ namespace adapter
         }
     }
   } // namespace PreciceDealCoupling
-} // namespace adapter
+} // namespace Adapter
 
 #endif // COUPLING_FUNCTIONS_H

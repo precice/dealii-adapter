@@ -70,7 +70,7 @@
 #include "include/time.h"
 #include "precice/SolverInterface.hpp"
 
-namespace adapter
+namespace Neo_Hook_Solid
 {
   using namespace dealii;
 
@@ -214,7 +214,7 @@ namespace adapter
     {}
 
     void
-    setup_lqp(const Parameters::AllParameters &parameters)
+    setup_lqp(const Adapter::Parameters::AllParameters &parameters)
     {
       material.reset(
         new Material_Compressible_Neo_Hook_One_Field<dim, NumberType>(
@@ -313,15 +313,15 @@ namespace adapter
     void
     output_results() const;
 
-    const Parameters::AllParameters parameters;
+    const Adapter::Parameters::AllParameters parameters;
 
     double vol_reference;
     double vol_current;
 
     Triangulation<dim> triangulation;
 
-    Time        time;
-    TimerOutput timer;
+    Adapter::Time time;
+    TimerOutput   timer;
 
     CellDataStorage<typename Triangulation<dim>::cell_iterator,
                     PointHistory<dim, NumberType>>
@@ -378,7 +378,7 @@ namespace adapter
     // container for data exchange with precice
     BlockVector<double> external_stress;
 
-    PreciceDealCoupling::CouplingFunctions<dim, BlockVector<double>>
+    Adapter::PreciceDealCoupling::CouplingFunctions<dim, BlockVector<double>>
       coupling_functions;
 
     struct Errors
@@ -423,7 +423,8 @@ namespace adapter
 
   template <int dim, typename NumberType>
   Solid<dim, NumberType>::Solid(const std::string &case_path)
-    : parameters(Parameters::AllParameters(case_path + "parameters.prm"))
+    : parameters(
+        Adapter::Parameters::AllParameters(case_path + "parameters.prm"))
     , vol_reference(0.0)
     , vol_current(0.0)
     , triangulation(Triangulation<dim>::maximum_smoothing)
@@ -1450,18 +1451,19 @@ namespace adapter
     data_out.build_patches(q_mapping, degree);
 
     std::ostringstream filename;
-    filename << "solution-" << time.get_timestep() << ".vtk";
+    filename << "solution-" << time.get_timestep() / parameters.output_interval
+             << ".vtk";
 
     std::ofstream output(filename.str().c_str());
     data_out.write_vtk(output);
   }
 
-} // namespace adapter
+} // namespace Neo_Hook_Solid
 
 int
 main(int argc, char **argv)
 {
-  using namespace adapter;
+  using namespace Neo_Hook_Solid;
   using namespace dealii;
 
   Utilities::MPI::MPI_InitFinalize mpi_initialization(argc, argv, 1);
