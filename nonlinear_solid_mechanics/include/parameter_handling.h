@@ -7,9 +7,18 @@ namespace Adapter
 {
   using namespace dealii;
 
+  /**
+   * This class declares all parameters, which can be specified in the parameter
+   * file. The subsection abut preCICE configurations is directly interlinked
+   * to the CouplingFunctions class.
+   */
+
   // TODO: Merge some structs together
   namespace Parameters
   {
+    /**
+     * @brief FESystem: Specifies the polynomial degree
+     */
     struct FESystem
     {
       unsigned int poly_degree;
@@ -44,7 +53,9 @@ namespace Adapter
       prm.leave_subsection();
     }
 
-
+    /**
+     * @brief Materials: Specifies material properties
+     */
     struct Materials
     {
       double nu;
@@ -90,7 +101,9 @@ namespace Adapter
       prm.leave_subsection();
     }
 
-
+    /**
+     * @brief LinearSolver: Specifies linear solver properties
+     */
     struct LinearSolver
     {
       std::string type_lin;
@@ -140,7 +153,9 @@ namespace Adapter
       prm.leave_subsection();
     }
 
-
+    /**
+     * @brief NonlinearSolver: Specifies nonlinear solver properties
+     */
     struct NonlinearSolver
     {
       unsigned int max_iterations_NR;
@@ -189,7 +204,9 @@ namespace Adapter
       prm.leave_subsection();
     }
 
-
+    /**
+     * @brief Time: Specifies simulation time properties
+     */
     struct Time
     {
       double delta_t;
@@ -235,7 +252,10 @@ namespace Adapter
       prm.leave_subsection();
     }
 
-
+    /**
+     * @brief NewmarkParameters: Specifies parameters for time integration by an
+     *        implicit Newmark scheme
+     */
     struct NewmarkParameters
     {
       double beta;
@@ -271,8 +291,11 @@ namespace Adapter
       prm.leave_subsection();
     }
 
-
-
+    /**
+     * @brief PreciceAdapterConfiguration: Specifies preCICE related information.
+     *        A lot of these information need to be consistent with the
+     *        precice-config.xml file.
+     */
     struct PreciceAdapterConfiguration
     {
       std::string  scenario;

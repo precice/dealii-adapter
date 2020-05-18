@@ -8,7 +8,12 @@
 namespace Neo_Hook_Solid
 {
   using namespace dealii;
-
+  /**
+   *  The Postprocessor class is used to handle the generation of output in the
+   *  main class. As opposed to the original work, the strain is additionally
+   *  to the dislpacement calculated and printed to the output file. Therefore,
+   *  the deal.II DataPostprocessor interface is used.
+   */
   template <int dim>
   class Postprocessor : public DataPostprocessor<dim>
   {

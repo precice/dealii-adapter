@@ -7,7 +7,9 @@ namespace Neo_Hook_Solid
 {
   using namespace dealii;
   /**
-   * Implementation of the actual material
+   * The Material_Compressible_Neo_Hook_One_Field class is nearly the same as in
+   * the original work. The density has been added as additional parameter,
+   * which is needed for time dependent problems.
    */
   template <int dim, typename NumberType>
   class Material_Compressible_Neo_Hook_One_Field

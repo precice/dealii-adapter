@@ -14,7 +14,7 @@ namespace Adapter
    *        extended by a @p set_absolute_time() function, which allows to set
    *        the time variables manually during simulation. This is necessary for
    *        subcycling and allows a more compact notation. This function is also
-   *        used in the @p coupling_functions().
+   *        used in the @p CouplingFunctions class.
    *
    *        The remaining member functions are self-explanatory.
    *
