@@ -42,7 +42,12 @@ namespace Adapter
        *             individual configuration and preCICE determines it
        *             automatically. In many cases, this data will just represent
        *             your initial condition.
-       * @param[out] precice_to_deal
+       * @param[out] precice_to_deal Data, which is received from preCICE/ from
+       *             other participants. Wether this data is useful already in
+       *             the beginning depends on your individual configuration and
+       *             preCICE determines it automatically. In many cases, this
+       *             data will just represent the initial condition of other
+       *             participants.
        */
       void
       initialize_precice(const DoFHandler<dim> &dof_handler,
@@ -53,9 +58,14 @@ namespace Adapter
        * @brief      Advances preCICE after every timestep, converts data formats
        *             between preCICE and dealii
        *
-       * @param[in]  deal_to_precice
-       * @param[out] precice_to_deal
-       * @param[in]  computedTimestepLength
+       * @param[in]  deal_to_precice Same data as in @p initialize_precice() i.e.
+       *             data, which should be given to preCICE after each time step
+       *             and exchanged with other participants.
+       * @param[out] precice_to_deal Same data as in @p initialize_precice() i.e.
+       *             data, which is received from preCICE/other participants
+       *             after each time step and exchanged with other participants.
+       * @param[in]  computed_timestep_length Length of the timestep used by
+       *             the solver.
        */
       void
       advance_precice(const VectorType &deal_to_precice,
@@ -63,9 +73,11 @@ namespace Adapter
                       const double      computed_timestep_length);
 
       /**
-       * @brief      Saves time dependent variables in case of an implicit coupling
+       * @brief      Saves current state of time dependent variables in case of an
+       *             implicit coupling
        *
-       * @param[in]  state_variables vector containing all variables to store
+       * @param[in]  state_variables Vector containing all variables to store as
+       *             reference
        *
        * @note       This function only makes sense, if it is used with
        *             @p reload_old_state_if_required. Therefore, the order, in which the
@@ -73,8 +85,8 @@ namespace Adapter
        *             both functions.
        * @note       The absolute time has no impact on the computation, but on the output.
        *             Therefore, we call here in the @p Time class a method to store the
-       *             current time and reload it later. This is necessary for
-       *             subcycling.
+       *             current time and reload it later. This is necessary, in case your
+       *             solver is subcycling.
        */
       void
       save_current_state_if_required(
@@ -83,14 +95,17 @@ namespace Adapter
 
       /**
        * @brief      Reloads the previously stored variables in case of an implicit
-       *             coupling
+       *             coupling. The current implementation supports subcycling,
+       *             i.e. previously refers o the last time
+       *             @p save_current_state_if_required() has been called.
        *
-       * @param[out] state_variables vector containing all variables to reload
+       * @param[out] state_variables Vector containing all variables to reload
+       *             as reference
        *
        * @note       This function only makes sense, if the state variables have been
-       *             stored by calling @p save_current_state_if_required. Therefore, the order, in
-       *             which the variables are passed into the vector must be the
-       *             same for both functions.
+       *             stored by calling @p save_current_state_if_required. Therefore,
+       *             the order, in which the variables are passed into the
+       *             vector must be the same for both functions.
        */
       void
       reload_old_state_if_required(std::vector<VectorType *> &state_variables,
@@ -111,16 +126,17 @@ namespace Adapter
       const std::string  write_data_name;
 
       int precice_mesh_id;
+      int precice_read_data_id;
+      int precice_write_data_id;
       int n_interface_nodes;
-      int ptd_data_id;
-      int dtp_data_id;
 
+      // TODO: Put all in a container and extend for 3d case
       IndexSet coupling_dofs_x_comp;
       IndexSet coupling_dofs_y_comp;
 
       std::vector<int>    interface_nodes_ids;
-      std::vector<double> precice_ptd;
-      std::vector<double> precice_dtp;
+      std::vector<double> read_data;
+      std::vector<double> write_data;
 
       std::vector<VectorType> old_state_data;
       double                  old_time_value;
@@ -160,10 +176,13 @@ namespace Adapter
       Assert(dim == precice.getDimensions(),
              ExcDimensionMismatch(dim, precice.getDimensions()));
 
+      Assert(dim > 1, ExcNotImplemented());
+
       // get precice specific IDs from precice
-      precice_mesh_id = precice.getMeshID(mesh_name);
-      ptd_data_id     = precice.getDataID(read_data_name, precice_mesh_id);
-      dtp_data_id     = precice.getDataID(write_data_name, precice_mesh_id);
+      precice_mesh_id      = precice.getMeshID(mesh_name);
+      precice_read_data_id = precice.getDataID(read_data_name, precice_mesh_id);
+      precice_write_data_id =
+        precice.getDataID(write_data_name, precice_mesh_id);
 
 
       // get the number of interface nodes from deal.ii
@@ -195,8 +214,8 @@ namespace Adapter
 
       std::vector<double> interface_nodes_positions(dim * n_interface_nodes);
 
-      precice_dtp.resize(dim * n_interface_nodes);
-      precice_ptd.resize(dim * n_interface_nodes);
+      write_data.resize(dim * n_interface_nodes);
+      read_data.resize(dim * n_interface_nodes);
       interface_nodes_ids.resize(n_interface_nodes);
 
       // get the coordinates of the interface nodes from deal.ii
@@ -236,10 +255,10 @@ namespace Adapter
           // store initial write_data for precice in precice_dtp
           format_deal_to_precice(deal_to_precice);
 
-          precice.writeBlockVectorData(dtp_data_id,
+          precice.writeBlockVectorData(precice_write_data_id,
                                        n_interface_nodes,
                                        interface_nodes_ids.data(),
-                                       precice_dtp.data());
+                                       write_data.data());
 
           precice.markActionFulfilled(
             precice::constants::actionWriteInitialData());
@@ -250,10 +269,10 @@ namespace Adapter
       // read initial readData from preCICE for the first time step
       if (precice.isReadDataAvailable())
         {
-          precice.readBlockVectorData(ptd_data_id,
+          precice.readBlockVectorData(precice_read_data_id,
                                       n_interface_nodes,
                                       interface_nodes_ids.data(),
-                                      precice_ptd.data());
+                                      read_data.data());
 
           format_precice_to_deal(precice_to_deal);
         }
@@ -271,20 +290,20 @@ namespace Adapter
       if (precice.isWriteDataRequired(computed_timestep_length))
         {
           format_deal_to_precice(deal_to_precice);
-          precice.writeBlockVectorData(dtp_data_id,
+          precice.writeBlockVectorData(precice_write_data_id,
                                        n_interface_nodes,
                                        interface_nodes_ids.data(),
-                                       precice_dtp.data());
+                                       write_data.data());
         }
 
       precice.advance(computed_timestep_length);
 
       if (precice.isReadDataAvailable())
         {
-          precice.readBlockVectorData(ptd_data_id,
+          precice.readBlockVectorData(precice_read_data_id,
                                       n_interface_nodes,
                                       interface_nodes_ids.data(),
-                                      precice_ptd.data());
+                                      read_data.data());
 
           format_precice_to_deal(precice_to_deal);
         }
@@ -309,8 +328,8 @@ namespace Adapter
       auto y_comp = coupling_dofs_y_comp.begin();
       for (int i = 0; i < n_interface_nodes; ++i)
         {
-          precice_dtp[2 * i]       = deal_to_precice[*x_comp];
-          precice_dtp[(2 * i) + 1] = deal_to_precice[*y_comp];
+          write_data[2 * i]       = deal_to_precice[*x_comp];
+          write_data[(2 * i) + 1] = deal_to_precice[*y_comp];
           ++x_comp;
           ++y_comp;
         }
@@ -327,8 +346,8 @@ namespace Adapter
       auto y_comp = coupling_dofs_y_comp.begin();
       for (int i = 0; i < n_interface_nodes; ++i)
         {
-          precice_to_deal[*x_comp] = precice_ptd[2 * i];
-          precice_to_deal[*y_comp] = precice_ptd[(2 * i) + 1];
+          precice_to_deal[*x_comp] = read_data[2 * i];
+          precice_to_deal[*y_comp] = read_data[(2 * i) + 1];
           ++x_comp;
           ++y_comp;
         }

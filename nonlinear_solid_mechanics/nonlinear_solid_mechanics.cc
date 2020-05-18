@@ -941,7 +941,7 @@ namespace Neo_Hook_Solid
                     scratch.solution_grads_u_total[f_q_point]);
 
                 const Tensor<1, dim, NumberType> referential_stress =
-                  Physics::Transformations::Contravariant::pull_back(
+                  Physics::Transformations::Covariant::pull_back(
                     local_stress[f_q_point], F);
 
                 for (unsigned int i = 0; i < dofs_per_cell; ++i)
