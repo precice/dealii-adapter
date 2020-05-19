@@ -137,11 +137,11 @@ namespace Adapter
       int precice_write_data_id;
       int n_interface_nodes;
 
-      // TODO: Put all in a container and extend for 3d case
       // Dof IndexSets of the global deal.II vectors, containing relevant
       // coupling dof indices
       IndexSet coupling_dofs_x_comp;
       IndexSet coupling_dofs_y_comp;
+      IndexSet coupling_dofs_z_comp;
 
       // Data containers which are passed to preCICE in an appropriate preCICE
       // specific format
@@ -250,6 +250,15 @@ namespace Adapter
                                         y_displacement),
                                       coupling_dofs_y_comp,
                                       couplingBoundary);
+      if (dim == 3)
+        {
+          const FEValuesExtractors::Scalar z_displacement(2);
+          DoFTools::extract_boundary_dofs(dof_handler,
+                                          dof_handler.get_fe().component_mask(
+                                            z_displacement),
+                                          coupling_dofs_z_comp,
+                                          couplingBoundary);
+        }
 
       n_interface_nodes = coupling_dofs_x_comp.n_elements();
 
@@ -386,16 +395,22 @@ namespace Adapter
       // look like this: [1] [3456] [11] for a 7th order 1d interface/2d cell.
       // Therefore, an index for the respective x component dof is not always
       // followed by an index on the same position for the y component
-      // TODO: It works fine, but there might be a more elegant way to implement
-      // the iterator over both sets
+
       auto x_comp = coupling_dofs_x_comp.begin();
       auto y_comp = coupling_dofs_y_comp.begin();
+      auto z_comp = coupling_dofs_z_comp.begin();
+
       for (int i = 0; i < n_interface_nodes; ++i)
         {
           write_data[2 * i]       = deal_to_precice[*x_comp];
           write_data[(2 * i) + 1] = deal_to_precice[*y_comp];
           ++x_comp;
           ++y_comp;
+          if (dim == 3)
+            {
+              write_data[(2 * i) + 2] = deal_to_precice[*z_comp];
+              ++z_comp;
+            }
         }
     }
 
@@ -409,12 +424,19 @@ namespace Adapter
       // This is the opposite direction as above. See comment there.
       auto x_comp = coupling_dofs_x_comp.begin();
       auto y_comp = coupling_dofs_y_comp.begin();
+      auto z_comp = coupling_dofs_z_comp.begin();
+
       for (int i = 0; i < n_interface_nodes; ++i)
         {
           precice_to_deal[*x_comp] = read_data[2 * i];
           precice_to_deal[*y_comp] = read_data[(2 * i) + 1];
           ++x_comp;
           ++y_comp;
+          if (dim == 3)
+            {
+              precice_to_deal[*z_comp] = read_data[(2 * i) + 2];
+              ++z_comp;
+            }
         }
     }
 
