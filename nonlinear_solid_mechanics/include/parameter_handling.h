@@ -58,9 +58,10 @@ namespace Adapter
      */
     struct Materials
     {
-      double nu;
-      double mu;
-      double rho;
+      double               nu;
+      double               mu;
+      double               rho;
+      Tensor<1, 3, double> body_force;
 
       static void
       declare_parameters(ParameterHandler &prm);
@@ -85,6 +86,11 @@ namespace Adapter
                           "Shear modulus");
 
         prm.declare_entry("rho", "1000", Patterns::Double(), "rho");
+
+        prm.declare_entry("body forces",
+                          "0,0,0",
+                          Patterns::List(Patterns::Double()),
+                          "body forces (x,y,z)");
       }
       prm.leave_subsection();
     }
@@ -97,6 +103,10 @@ namespace Adapter
         nu  = prm.get_double("Poisson's ratio");
         mu  = prm.get_double("Shear modulus");
         rho = prm.get_double("rho");
+        const std::vector<std::string> body_forces_input =
+          Utilities::split_string_list(prm.get("body forces"));
+        for (uint d = 0; d < 3; ++d)
+          body_force[d] = Utilities::string_to_double(body_forces_input[d]);
       }
       prm.leave_subsection();
     }

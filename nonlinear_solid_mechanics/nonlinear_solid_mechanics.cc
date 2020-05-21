@@ -234,6 +234,9 @@ namespace Neo_Hook_Solid
     const double alpha_6 =
       (1 - (parameters.gamma / (2 * parameters.beta))) * parameters.delta_t;
 
+    // Read body force from parameter file
+    const Tensor<1, 3, double> body_force = parameters.body_force;
+
     AffineConstraints<double> constraints;
     BlockSparsityPattern      sparsity_pattern;
     BlockSparseMatrix<double> tangent_matrix;
@@ -374,6 +377,13 @@ namespace Neo_Hook_Solid
   void
   Solid<dim, NumberType>::make_grid()
   {
+    // Assert here, since dimension information is not available in parameter
+    // class and the input is parsed as List
+    Assert(
+      (dim == 2 && body_force[2] == 0) || dim == 3,
+      ExcMessage(
+        "Setting body forces in z-direction for a two dimensional simulation has no effect"));
+
     const std::string testcase("PF");
 
     Point<dim>   point_bottom, point_tip;
@@ -990,6 +1000,9 @@ namespace Neo_Hook_Solid
       const FEValuesExtractors::Vector &u_fe    = data.solid->u_fe;
       const double &                    alpha_1 = data.solid->alpha_1;
 
+      // Define const force vector for gravity
+      const Tensor<1, 3, double> body_force = data.solid->body_force;
+
       data.reset();
       scratch.reset();
       scratch.fe_values_ref.reinit(cell);
@@ -1064,10 +1077,6 @@ namespace Neo_Hook_Solid
           const std::vector<Tensor<1, dim, NumberType>> &shape_value =
             scratch.shape_value[q_point];
 
-          // TODO: Add to parameter file
-          // Define const force vector for gravity
-          const Tensor<1, dim> body_force({0, 0. * rho});
-
           for (unsigned int i = 0; i < dofs_per_cell; ++i)
             {
               const unsigned int component_i =
@@ -1081,7 +1090,7 @@ namespace Neo_Hook_Solid
                   // Geometrical stress and body force contribution
                   data.cell_rhs(i) -=
                     ((symm_grad_Nx[i] * tau) -
-                     (body_force[component_i] *
+                     (body_force[component_i] * rho *
                       scratch.fe_values_ref.shape_value(i, q_point))) *
                     JxW;
                   // Mass matrix contribution with acceleration
