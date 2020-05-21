@@ -122,14 +122,21 @@ namespace Adapter
 
       precice::SolverInterface precice;
 
+      // Boundary ID of the deal.II mesh, associated with the coupling
+      // interface. The variable is public and should be used during grid
+      // generation, but is also involved during system assembly.
+      // It has been chosen arbitrarily to be 6, but it could be any other
+      // number as well. The only thing, one needs to make sure is, that this ID
+      // is not given to another part of the boundary e.g. clamped one, but this
+      // is asserted in the make_grid function
+      static constexpr unsigned int deal_boundary_interface_id = 6;
+
     private:
       // preCICE related initializations
       // These variables are specified and read from the parameter file
-      const unsigned int deal_boundary_id;
-      const bool         enable_precice;
-      const std::string  mesh_name;
-      const std::string  read_data_name;
-      const std::string  write_data_name;
+      const std::string mesh_name;
+      const std::string read_data_name;
+      const std::string write_data_name;
 
       // These IDs are given by preCICE during initialization
       int precice_mesh_id;
@@ -198,8 +205,6 @@ namespace Adapter
                 parameters.config_file,
                 Utilities::MPI::this_mpi_process(MPI_COMM_WORLD),
                 Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD))
-      , deal_boundary_id(parameters.interface_mesh_id)
-      , enable_precice(parameters.enable_precice)
       , mesh_name(parameters.mesh_name)
       , read_data_name(parameters.read_data_name)
       , write_data_name(parameters.write_data_name)
@@ -231,7 +236,7 @@ namespace Adapter
       // Therefore, we extract one component of the vector valued dofs and store
       // them in an IndexSet
       std::set<types::boundary_id> couplingBoundary;
-      couplingBoundary.insert(deal_boundary_id);
+      couplingBoundary.insert(deal_boundary_interface_id);
 
       const FEValuesExtractors::Scalar x_displacement(0);
 

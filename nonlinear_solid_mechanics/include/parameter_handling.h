@@ -12,51 +12,12 @@ namespace Adapter
    * file. The subsection abut preCICE configurations is directly interlinked
    * to the CouplingFunctions class.
    */
-
-  // TODO: Merge some structs together
   namespace Parameters
   {
     /**
-     * @brief FESystem: Specifies the polynomial degree
+     * @brief System: Specifies system properties
      */
-    struct FESystem
-    {
-      unsigned int poly_degree;
-
-      static void
-      declare_parameters(ParameterHandler &prm);
-
-      void
-      parse_parameters(ParameterHandler &prm);
-    };
-
-    void
-    FESystem::declare_parameters(ParameterHandler &prm)
-    {
-      prm.enter_subsection("Finite element system");
-      {
-        prm.declare_entry("Polynomial degree",
-                          "1",
-                          Patterns::Integer(0),
-                          "Polynomial degree of the FE system");
-      }
-      prm.leave_subsection();
-    }
-
-    void
-    FESystem::parse_parameters(ParameterHandler &prm)
-    {
-      prm.enter_subsection("Finite element system");
-      {
-        poly_degree = prm.get_integer("Polynomial degree");
-      }
-      prm.leave_subsection();
-    }
-
-    /**
-     * @brief Materials: Specifies material properties
-     */
-    struct Materials
+    struct System
     {
       double               nu;
       double               mu;
@@ -71,9 +32,9 @@ namespace Adapter
     };
 
     void
-    Materials::declare_parameters(ParameterHandler &prm)
+    System::declare_parameters(ParameterHandler &prm)
     {
-      prm.enter_subsection("Material properties");
+      prm.enter_subsection("System properties");
       {
         prm.declare_entry("Poisson's ratio",
                           "0.3",
@@ -90,15 +51,15 @@ namespace Adapter
         prm.declare_entry("body forces",
                           "0,0,0",
                           Patterns::List(Patterns::Double()),
-                          "body forces (x,y,z)");
+                          "body forces x,y,z");
       }
       prm.leave_subsection();
     }
 
     void
-    Materials::parse_parameters(ParameterHandler &prm)
+    System::parse_parameters(ParameterHandler &prm)
     {
-      prm.enter_subsection("Material properties");
+      prm.enter_subsection("System properties");
       {
         nu  = prm.get_double("Poisson's ratio");
         mu  = prm.get_double("Shear modulus");
@@ -263,13 +224,15 @@ namespace Adapter
     }
 
     /**
-     * @brief NewmarkParameters: Specifies parameters for time integration by an
-     *        implicit Newmark scheme
+     * @brief Discretization: Specifies parameters for time integration by an
+     *        implicit Newmark scheme and polynomial degree of the FE system
      */
-    struct NewmarkParameters
+    struct Discretization
     {
-      double beta;
-      double gamma;
+      double       beta;
+      double       gamma;
+      unsigned int poly_degree;
+
 
       static void
       declare_parameters(ParameterHandler &prm);
@@ -279,24 +242,36 @@ namespace Adapter
     };
 
     void
-    NewmarkParameters::declare_parameters(ParameterHandler &prm)
+    Discretization::declare_parameters(ParameterHandler &prm)
     {
-      prm.enter_subsection("Newmark parameters");
+      prm.enter_subsection("Discretization");
       {
-        prm.declare_entry("beta", "0.25", Patterns::Double(0, 0.5), "beta");
+        prm.declare_entry("beta",
+                          "0.25",
+                          Patterns::Double(0, 0.5),
+                          "Newmark beta");
 
-        prm.declare_entry("gamma", "0.5", Patterns::Double(0, 1), "gamma");
+        prm.declare_entry("gamma",
+                          "0.5",
+                          Patterns::Double(0, 1),
+                          "Newmark gamma");
+
+        prm.declare_entry("Polynomial degree",
+                          "3",
+                          Patterns::Integer(0),
+                          "Polynomial degree of the FE system");
       }
       prm.leave_subsection();
     }
 
     void
-    NewmarkParameters::parse_parameters(ParameterHandler &prm)
+    Discretization::parse_parameters(ParameterHandler &prm)
     {
-      prm.enter_subsection("Newmark parameters");
+      prm.enter_subsection("Discretization");
       {
-        beta  = prm.get_double("beta");
-        gamma = prm.get_double("gamma");
+        beta        = prm.get_double("beta");
+        gamma       = prm.get_double("gamma");
+        poly_degree = prm.get_integer("Polynomial degree");
       }
       prm.leave_subsection();
     }
@@ -308,14 +283,12 @@ namespace Adapter
      */
     struct PreciceAdapterConfiguration
     {
-      std::string  scenario;
-      bool         enable_precice;
-      std::string  config_file;
-      std::string  participant_name;
-      std::string  mesh_name;
-      std::string  read_data_name;
-      std::string  write_data_name;
-      unsigned int interface_mesh_id;
+      std::string scenario;
+      std::string config_file;
+      std::string participant_name;
+      std::string mesh_name;
+      std::string read_data_name;
+      std::string write_data_name;
 
       static void
       declare_parameters(ParameterHandler &prm);
@@ -334,11 +307,6 @@ namespace Adapter
                           "FSI3",
                           Patterns::Selection("FSI3|PF"),
                           "Cases: FSI3 or PF for perpendicular flap");
-        prm.declare_entry(
-          "Enable precice",
-          "true",
-          Patterns::Bool(),
-          "Whether preCICE is used for coupling to another solver");
         prm.declare_entry("precice config-file",
                           "precice-config.xml",
                           Patterns::Anything(),
@@ -350,7 +318,7 @@ namespace Adapter
           "Name of the participant in the precice-config.xml file");
         prm.declare_entry(
           "Mesh name",
-          "dealii-mesh-nodes",
+          "dealii-mesh",
           Patterns::Anything(),
           "Name of the coupling mesh in the precice-config.xml file");
         prm.declare_entry(
@@ -363,11 +331,6 @@ namespace Adapter
           "calculated-data",
           Patterns::Anything(),
           "Name of the write data in the precice-config.xml file");
-        prm.declare_entry(
-          "Interface mesh ID",
-          "1",
-          Patterns::Integer(0),
-          "Boundary mesh ID of the coupling interface in deal.II");
       }
       prm.leave_subsection();
     }
@@ -377,26 +340,23 @@ namespace Adapter
     {
       prm.enter_subsection("precice configuration");
       {
-        scenario          = prm.get("Scenario");
-        enable_precice    = prm.get_bool("Enable precice");
-        config_file       = prm.get("precice config-file");
-        participant_name  = prm.get("Participant name");
-        mesh_name         = prm.get("Mesh name");
-        read_data_name    = prm.get("Read data name");
-        write_data_name   = prm.get("Write data name");
-        interface_mesh_id = prm.get_integer("Interface mesh ID");
+        scenario         = prm.get("Scenario");
+        config_file      = prm.get("precice config-file");
+        participant_name = prm.get("Participant name");
+        mesh_name        = prm.get("Mesh name");
+        read_data_name   = prm.get("Read data name");
+        write_data_name  = prm.get("Write data name");
       }
       prm.leave_subsection();
     }
 
 
 
-    struct AllParameters : public FESystem,
-                           public Materials,
+    struct AllParameters : public System,
                            public LinearSolver,
                            public NonlinearSolver,
                            public Time,
-                           public NewmarkParameters,
+                           public Discretization,
                            public PreciceAdapterConfiguration
 
     {
@@ -424,24 +384,22 @@ namespace Adapter
     void
     AllParameters::declare_parameters(ParameterHandler &prm)
     {
-      FESystem::declare_parameters(prm);
-      Materials::declare_parameters(prm);
+      System::declare_parameters(prm);
       LinearSolver::declare_parameters(prm);
       NonlinearSolver::declare_parameters(prm);
       Time::declare_parameters(prm);
-      NewmarkParameters::declare_parameters(prm);
+      Discretization::declare_parameters(prm);
       PreciceAdapterConfiguration::declare_parameters(prm);
     }
 
     void
     AllParameters::parse_parameters(ParameterHandler &prm)
     {
-      FESystem::parse_parameters(prm);
-      Materials::parse_parameters(prm);
+      System::parse_parameters(prm);
       LinearSolver::parse_parameters(prm);
       NonlinearSolver::parse_parameters(prm);
       Time::parse_parameters(prm);
-      NewmarkParameters::parse_parameters(prm);
+      Discretization::parse_parameters(prm);
       PreciceAdapterConfiguration::parse_parameters(prm);
     }
   } // namespace Parameters

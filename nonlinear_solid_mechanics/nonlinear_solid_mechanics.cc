@@ -384,12 +384,13 @@ namespace Neo_Hook_Solid
       ExcMessage(
         "Setting body forces in z-direction for a two dimensional simulation has no effect"));
 
-    const std::string testcase("PF");
+    const std::string testcase(parameters.scenario);
 
     Point<dim>   point_bottom, point_tip;
     unsigned int id_flap_long_bottom, id_flap_long_top, id_flap_short_bottom,
       id_flap_short_top, n_x, n_y;
 
+    // Assertion is done via an input pattern in the parameter class
     if (testcase == "PF")
       { // flap_perp
         point_bottom =
@@ -437,9 +438,14 @@ namespace Neo_Hook_Solid
 
 
     // Cell iterator for boundary conditions
+
+    // The Neumann ID is stored in the CouplingFunctions to avoid errors. Hence,
+    // we need to call it from there
+    const unsigned int neumann_boundary_id =
+      coupling_functions.deal_boundary_interface_id;
     const unsigned int clamped_boundary_id = 1;
+    // Not apparent in this cases
     //    const unsigned int do_nothing_boundary_id = 2;
-    const unsigned int neumann_boundary_id = parameters.interface_mesh_id;
 
     typename Triangulation<dim>::active_cell_iterator cell = triangulation
                                                                .begin_active(),
@@ -462,6 +468,11 @@ namespace Neo_Hook_Solid
                                      "you set a boundary "
                                      "condition?"))
           }
+    // Check, whether the given IDs are mutually exclusive
+    Assert(
+      clamped_boundary_id != neumann_boundary_id,
+      ExcMessage(
+        "Boundary IDs must not be the same, for different boundary types."));
 
     vol_reference = GridTools::volume(triangulation);
     vol_current   = vol_reference;
@@ -928,7 +939,8 @@ namespace Neo_Hook_Solid
       const FESystem<dim> &fe                = data.solid->fe;
       const unsigned int & u_dof             = data.solid->u_dof;
       const FEValuesExtractors::Vector &u_fe = data.solid->u_fe;
-      const unsigned int &interf_id = data.solid->parameters.interface_mesh_id;
+      const unsigned int &              interf_id =
+        data.solid->coupling_functions.deal_boundary_interface_id;
 
       for (unsigned int face = 0; face < GeometryInfo<dim>::faces_per_cell;
            ++face)
