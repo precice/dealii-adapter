@@ -1,21 +1,3 @@
-/* ---------------------------------------------------------------------
- * Copyright (c) 2020 by the preCICE authors
- *
- * This file is part of the dealii-adapter for the coupling library
- * preCICE. Parts of this program are based on deal.II tutorial programs.
- *
- * This adapter is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version. The full text of the license can
- * be found in the file LICENSE in the precice/dealii-adapter repository.
- * Parts of this program are based on the previous work of Jean-Paul Pelteret
- * and Andrew McBride in their deal.II code gallery program 'Quasi-Static
- * Finite-Strain Compressible Elasticity'
- * ---------------------------------------------------------------------
- *
- * Author: David Schneider 2020
- */
 #include <deal.II/base/function.h>
 #include <deal.II/base/parameter_handler.h>
 #include <deal.II/base/quadrature_lib.h>
@@ -76,6 +58,10 @@ namespace Neo_Hook_Solid
 {
   using namespace dealii;
 
+
+  // PointHistory class offers a method for storing data at the quadrature
+  // points. Here each quadrature point holds a pointer to a material
+  // description
   template <int dim, typename NumberType>
   class PointHistory
   {
@@ -94,27 +80,28 @@ namespace Neo_Hook_Solid
           parameters.mu, parameters.nu, parameters.rho));
     }
 
+    // Strain energy
     NumberType
     get_Psi(const NumberType &                         det_F,
             const SymmetricTensor<2, dim, NumberType> &b_bar) const
     {
       return material->get_Psi(det_F, b_bar);
     }
-
+    // Kirchhoff stress
     SymmetricTensor<2, dim, NumberType>
     get_tau(const NumberType &                         det_F,
             const SymmetricTensor<2, dim, NumberType> &b_bar) const
     {
       return material->get_tau(det_F, b_bar);
     }
-
+    // Tangent
     SymmetricTensor<4, dim, NumberType>
     get_Jc(const NumberType &                         det_F,
            const SymmetricTensor<2, dim, NumberType> &b_bar) const
     {
       return material->get_Jc(det_F, b_bar);
     }
-
+    // Density
     NumberType
     get_rho() const
     {
@@ -127,12 +114,17 @@ namespace Neo_Hook_Solid
   };
 
 
-
+  // Forward declarations for classes that will perform assembly of the
+  // linearized system
   template <int dim, typename NumberType>
   struct Assembler_Base;
   template <int dim, typename NumberType>
   struct Assembler;
 
+  // The Solid class is the central class in that it represents the problem at
+  // hand. It follows the usual scheme in that all it really has is a
+  // constructor, destructor and a run() function that dispatches all the work
+  // to private functions of this class:
   template <int dim, typename NumberType = double>
   class Solid
   {
@@ -145,35 +137,51 @@ namespace Neo_Hook_Solid
     run();
 
   private:
+    // Generates grid and sets boundary IDs, which are needed for different BCs
     void
     make_grid();
-
+    // Set up the finite element system to be solved
     void
     system_setup();
 
+    // Several functions to assemble the system and right hand side matrices
+    // using multithreading. Each of them comes as a wrapper function, one that
+    // is executed to do the work in the WorkStream model on one cell, and one
+    // that copies the work done on this one cell into the global object that
+    // represents it
     void
     assemble_system(const BlockVector<double> &solution_delta,
                     const BlockVector<double> &acceleration,
                     const BlockVector<double> &external_stress);
 
+    // We use a separate data structure to perform the assembly. It needs access
+    // to some low-level data, so we simply befriend the class instead of
+    // creating a complex interface to provide access as necessary.
     friend struct Assembler_Base<dim, NumberType>;
     friend struct Assembler<dim, NumberType>;
 
+    // Apply Dirichlet boundary conditions on the displacement field
     void
     make_constraints(const int &it_nr);
 
+    // Create and update the quadrature points. Here, no data needs to be copied
+    // into a global object, so the copy_local_to_global function is empty:
     void
     setup_qph();
 
+    // Solve for the displacement using a Newton-Raphson method.
     void
     solve_nonlinear_timestep(BlockVector<double> &solution_delta);
 
     std::pair<unsigned int, double>
     solve_linear_system(BlockVector<double> &newton_update);
 
+    // Solution retrieval
     BlockVector<double>
     get_total_solution(const BlockVector<double> &solution_delta) const;
 
+    // Update fnuctions for time dependent variables according to Newmarks
+    // scheme
     void
     update_acceleration(BlockVector<double> &displacement_delta);
 
@@ -183,6 +191,7 @@ namespace Neo_Hook_Solid
     void
     update_old_variables();
 
+    // Post-processing and writing data to file :
     void
     output_results() const;
 
@@ -206,6 +215,9 @@ namespace Neo_Hook_Solid
     const unsigned int               dofs_per_cell;
     const FEValuesExtractors::Vector u_fe;
 
+    // Description of how the block-system is arranged. There is just 1 block,
+    // that contains a vector DOF u. This is a legacy of the original work
+    // (step-44)
     static const unsigned int n_blocks          = 1;
     static const unsigned int n_components      = dim;
     static const unsigned int first_u_component = 0;
@@ -237,6 +249,12 @@ namespace Neo_Hook_Solid
     // Read body force from parameter file
     const Tensor<1, 3, double> body_force = parameters.body_force;
 
+    // Clamped boundary ID to be used consistently
+    const unsigned int clamped_boundary_id = 1;
+
+    // ..and store the directory, in order to output the result files there
+    const std::string case_path;
+
     AffineConstraints<double> constraints;
     BlockSparsityPattern      sparsity_pattern;
     BlockSparseMatrix<double> tangent_matrix;
@@ -248,14 +266,22 @@ namespace Neo_Hook_Solid
     BlockVector<double>       acceleration;
     BlockVector<double>       acceleration_old;
 
-    // Alias
+    // Alias to collect all time dependent variables in a single vector
+    // This is directly passed to the CouplingFunctions routine in order to
+    // store these variables for implicit couplings.
     std::vector<BlockVector<double> *> state_variables;
 
-    // container for data exchange with precice
+    // Global vector, which keeps all contributions of the Fluid participant
+    // i.e. stress data for assembly. This vector is filled properly in the
+    // CouplingFunctions
     BlockVector<double> external_stress;
 
+    // Adapter object, which does all work in terms of coupling with preCICE
     Adapter::PreciceDealCoupling::CouplingFunctions<dim, BlockVector<double>>
       coupling_functions;
+
+    // Then define a number of variables to store norms and update norms and
+    // normalisation factors.
 
     struct Errors
     {
@@ -281,6 +307,7 @@ namespace Neo_Hook_Solid
     Errors error_residual, error_residual_0, error_residual_norm, error_update,
       error_update_0, error_update_norm;
 
+    // Methods to calculate erros
     void
     get_error_residual(Errors &error_residual);
 
@@ -288,6 +315,7 @@ namespace Neo_Hook_Solid
     get_error_update(const BlockVector<double> &newton_update,
                      Errors &                   error_update);
 
+    // Print information to screen during simulation
     static void
     print_conv_header();
 
@@ -296,7 +324,7 @@ namespace Neo_Hook_Solid
   };
 
 
-
+  // Constructor initializes member variables and reads the parameter file
   template <int dim, typename NumberType>
   Solid<dim, NumberType>::Solid(const std::string &case_path)
     : parameters(
@@ -317,9 +345,11 @@ namespace Neo_Hook_Solid
     , qf_face(parameters.poly_degree + 2)
     , n_q_points(qf_cell.size())
     , n_q_points_f(qf_face.size())
+    , case_path(case_path)
     , coupling_functions(parameters)
   {}
 
+  // Destructor clears the DoFHandler
   template <int dim, typename NumberType>
   Solid<dim, NumberType>::~Solid()
   {
@@ -327,47 +357,62 @@ namespace Neo_Hook_Solid
   }
 
 
+  // As deal typical, the run function starts the calculation
   template <int dim, typename NumberType>
   void
   Solid<dim, NumberType>::run()
   {
+    // First, set up a grid and the FE system, as usual
     make_grid();
     system_setup();
     output_results();
     time.increment();
 
+    // Initialize preCICE before starting the time loop
+    // Here, all information concerning the coupling is passed to preCICE
     coupling_functions.initialize_precice(dof_handler_ref,
                                           total_displacement,
                                           external_stress);
 
 
     BlockVector<NumberType> solution_delta(dofs_per_block);
+
+    // Start the time loop. Steering is done by preCICE itself
     while (coupling_functions.precice.isCouplingOngoing())
       {
         solution_delta = 0.0;
 
+        // If we have an implicit coupling, we need to save data before
+        // advancing in time in order to restore it later
         coupling_functions.save_current_state_if_required(state_variables,
                                                           time);
 
+        // Solve a the system using the Newton-Raphson algorithm
         solve_nonlinear_timestep(solution_delta);
         total_displacement += solution_delta;
 
+        // Update time dependent variables afterwards
         update_acceleration(solution_delta);
         update_velocity(solution_delta);
         update_old_variables();
 
+        // ... and pass the coupling data to preCICE, in this case displacement
+        // (write data) and stress (read data)
         coupling_functions.advance_precice(total_displacement,
                                            external_stress,
                                            time.get_delta_t());
         time.increment();
 
+        // Restore the old state, if our implicit time step is not yet converged
         coupling_functions.reload_old_state_if_required(state_variables, time);
 
+        // ...and output results, if the coupling time step has converged
         if (coupling_functions.precice.isTimeWindowComplete() &&
             time.get_timestep() % parameters.output_interval == 0)
           output_results();
       }
 
+    // finalizes preCICE and finishes the simulation
     coupling_functions.precice.finalize();
   }
 
@@ -390,7 +435,7 @@ namespace Neo_Hook_Solid
     unsigned int id_flap_long_bottom, id_flap_long_top, id_flap_short_bottom,
       id_flap_short_top, n_x, n_y;
 
-    // Assertion is done via an input pattern in the parameter class
+    // Assertion is done via a input pattern in the parameter class
     if (testcase == "PF")
       { // flap_perp
         point_bottom =
@@ -425,6 +470,7 @@ namespace Neo_Hook_Solid
 
     std::vector<unsigned int> repetitions({n_x, n_y});
 
+    // Generate the mesh
     GridGenerator::subdivided_hyper_rectangle(triangulation,
                                               repetitions,
                                               point_bottom,
@@ -439,29 +485,31 @@ namespace Neo_Hook_Solid
 
     // Cell iterator for boundary conditions
 
-    // The Neumann ID is stored in the CouplingFunctions to avoid errors. Hence,
-    // we need to call it from there
+    // The boundary ID for Neumann BCs is stored in the CouplingFunctions to
+    // avoid errors. Hence, we need to call it from there.
+    // Note, the selected IDs are arbitrarily chosen. They just need to be
+    // unique
     const unsigned int neumann_boundary_id =
       coupling_functions.deal_boundary_interface_id;
-    const unsigned int clamped_boundary_id = 1;
+    // ...and for clamped boundaries. The ID needs to be consistent with the one
+    // set in make_constarints. We decided to set one globally, which is reused
+    // in make_constraints
+    const unsigned int clamped_id = clamped_boundary_id;
     // Not apparent in this cases
+    // This might be useful in case you want to overwrite/delete default IDs
     //    const unsigned int do_nothing_boundary_id = 2;
 
-    typename Triangulation<dim>::active_cell_iterator cell = triangulation
-                                                               .begin_active(),
-                                                      endc =
-                                                        triangulation.end();
-    for (; cell != endc; ++cell)
-      for (unsigned int face = 0; face < GeometryInfo<dim>::faces_per_cell;
-           ++face)
-        if (cell->face(face)->at_boundary() == true)
+    // Finally, set the IDs
+    for (const auto &cell : triangulation.active_cell_iterators())
+      for (const auto &face : cell->face_iterators())
+        if (face->at_boundary() == true)
           {
-            if (cell->face(face)->boundary_id() == id_flap_short_bottom)
-              cell->face(face)->set_boundary_id(clamped_boundary_id);
-            else if (cell->face(face)->boundary_id() == id_flap_long_bottom ||
-                     cell->face(face)->boundary_id() == id_flap_long_top ||
-                     cell->face(face)->boundary_id() == id_flap_short_top)
-              cell->face(face)->set_boundary_id(neumann_boundary_id);
+            if (face->boundary_id() == id_flap_short_bottom)
+              face->set_boundary_id(clamped_id);
+            else if (face->boundary_id() == id_flap_long_bottom ||
+                     face->boundary_id() == id_flap_long_top ||
+                     face->boundary_id() == id_flap_short_top)
+              face->set_boundary_id(neumann_boundary_id);
             else
               AssertThrow(false,
                           ExcMessage("Unknown boundary id, did "
@@ -470,7 +518,7 @@ namespace Neo_Hook_Solid
           }
     // Check, whether the given IDs are mutually exclusive
     Assert(
-      clamped_boundary_id != neumann_boundary_id,
+      clamped_id != neumann_boundary_id,
       ExcMessage(
         "Boundary IDs must not be the same, for different boundary types."));
 
@@ -490,6 +538,8 @@ namespace Neo_Hook_Solid
     std::vector<unsigned int> block_component(n_components,
                                               u_dof); // Displacement
 
+    // The DOF handler is then initialised and we renumber the grid in an
+    // efficient manner. We also record the number of DOFs per block.
     dof_handler_ref.distribute_dofs(fe);
     DoFRenumbering::Cuthill_McKee(dof_handler_ref);
     DoFRenumbering::component_wise(dof_handler_ref, block_component);
@@ -521,8 +571,11 @@ namespace Neo_Hook_Solid
       sparsity_pattern.copy_from(csp);
     }
 
+    // Setup the sparsity pattern and tangent matrixI
     tangent_matrix.reinit(sparsity_pattern);
 
+    // We then set up storage vectors. Here, one vector for each time dependent
+    // variable is needed
     system_rhs.reinit(dofs_per_block);
     system_rhs.collect_sizes();
 
@@ -538,7 +591,8 @@ namespace Neo_Hook_Solid
     acceleration_old.reinit(total_displacement);
     external_stress.reinit(total_displacement);
 
-    // Alias
+    // Alias: Container, which holds references for all time dependent variables
+    // to enable a compact notation
     state_variables = std::vector({&total_displacement,
                                    &total_displacement_old,
                                    &velocity,
@@ -551,6 +605,8 @@ namespace Neo_Hook_Solid
     timer.leave_subsection();
   }
 
+  // Firstly the actual QPH data objects are created. This must be done only
+  // once the grid is refined to its finest level.
 
   template <int dim, typename NumberType>
   void
@@ -562,10 +618,7 @@ namespace Neo_Hook_Solid
                                         triangulation.end(),
                                         n_q_points);
 
-    for (typename Triangulation<dim>::active_cell_iterator cell =
-           triangulation.begin_active();
-         cell != triangulation.end();
-         ++cell)
+    for (const auto &cell : triangulation.active_cell_iterators())
       {
         const std::vector<std::shared_ptr<PointHistory<dim, NumberType>>> lqph =
           quadrature_point_history.get_data(cell);
@@ -577,7 +630,9 @@ namespace Neo_Hook_Solid
   }
 
 
-
+  // The next function is the driver method for the Newton-Raphson scheme. At
+  // its top we create a new vector to store the current Newton update step,
+  // reset the error storage objects and print solver header.
   template <int dim, typename NumberType>
   void
   Solid<dim, NumberType>::solve_nonlinear_timestep(
@@ -598,6 +653,11 @@ namespace Neo_Hook_Solid
 
     print_conv_header();
 
+    // We now perform a number of Newton iterations to iteratively solve the
+    // nonlinear problem. Since the problem is fully nonlinear and we are
+    // using a full Newton method, the data stored in the tangent matrix and
+    // right-hand side vector is not reusable and must be cleared at each
+    // Newton step.
     unsigned int newton_iteration = 0;
     for (; newton_iteration < parameters.max_iterations_NR; ++newton_iteration)
       {
@@ -605,6 +665,8 @@ namespace Neo_Hook_Solid
                   << std::flush;
 
         make_constraints(newton_iteration);
+        // Acceleration is evaluated at t_n+1 and therefore updated in each
+        // lineraized step
         update_acceleration(solution_delta);
 
         assemble_system(solution_delta, acceleration, external_stress);
@@ -631,6 +693,7 @@ namespace Neo_Hook_Solid
             break;
           }
 
+        // Solve the system
         const std::pair<unsigned int, double> lin_solver_output =
           solve_linear_system(newton_update);
 
@@ -639,6 +702,10 @@ namespace Neo_Hook_Solid
         if (newton_iteration == 0)
           error_update_0 = error_update;
 
+        // We can now determine the normalised Newton update error, and perform
+        // the actual update of the solution increment for the current time
+        // step, update all quadrature point information pertaining to this new
+        // displacement and stress state and continue iterating:
         error_update_norm = error_update;
         error_update_norm.normalise(error_update_0);
 
@@ -679,7 +746,6 @@ namespace Neo_Hook_Solid
   }
 
 
-
   template <int dim, typename NumberType>
   void
   Solid<dim, NumberType>::print_conv_footer()
@@ -701,7 +767,10 @@ namespace Neo_Hook_Solid
   }
 
 
-
+  // Determine the true residual error for the problem. That is, determine the
+  // error in the residual for the unconstrained degrees of freedom. Note that
+  // to do so, we need to ignore constrained DOFs by setting the residual in
+  // these vector components to zero.
   template <int dim, typename NumberType>
   void
   Solid<dim, NumberType>::get_error_residual(Errors &error_residual)
@@ -732,7 +801,7 @@ namespace Neo_Hook_Solid
   }
 
 
-
+  // Returns the total displacement needed during assembly
   template <int dim, typename NumberType>
   BlockVector<double>
   Solid<dim, NumberType>::get_total_solution(
@@ -744,7 +813,7 @@ namespace Neo_Hook_Solid
   }
 
 
-
+  // Update the acceleration according to Newmarks method
   template <int dim, typename NumberType>
   void
   Solid<dim, NumberType>::update_acceleration(
@@ -755,7 +824,7 @@ namespace Neo_Hook_Solid
   }
 
 
-
+  // Update the velocity according to Newmarks method
   template <int dim, typename NumberType>
   void
   Solid<dim, NumberType>::update_velocity(
@@ -766,7 +835,7 @@ namespace Neo_Hook_Solid
   }
 
 
-
+  // Update variables related to old time steps
   template <int dim, typename NumberType>
   void
   Solid<dim, NumberType>::update_old_variables()
@@ -785,6 +854,8 @@ namespace Neo_Hook_Solid
     virtual ~Assembler_Base()
     {}
 
+    // Here we deal with the tangent matrix assembly structures. The PerTaskData
+    // object stores local contributions.
     struct PerTaskData_ASM
     {
       const Solid<dim, NumberType> *       solid;
@@ -807,6 +878,9 @@ namespace Neo_Hook_Solid
       }
     };
 
+    // On the other hand, the ScratchData object stores the larger objects such
+    // as the shape-function values array (Nx) and a shape function gradient and
+    // symmetric gradient vector which we will use during the assembly.
     struct ScratchData_ASM
     {
       const BlockVector<double> &             solution_total;
@@ -891,7 +965,12 @@ namespace Neo_Hook_Solid
           }
       }
     };
-
+    // Due to the C++ specialization rules, we need one more level of
+    // indirection in order to define the assembly routine for all different
+    // number. The next function call is specialized for each NumberType, but to
+    // prevent having to specialize the whole class along with it we have
+    // inlined the definition of the other functions that are common to all
+    // implementations.
     void
     assemble_system_one_cell(
       const typename DoFHandler<dim>::active_cell_iterator &cell,
@@ -902,6 +981,7 @@ namespace Neo_Hook_Solid
       assemble_neumann_contribution_one_cell(cell, scratch, data);
     }
 
+    // This function adds the local contribution to the system matrix.
     void
     copy_local_to_global_ASM(const PerTaskData_ASM &data)
     {
@@ -918,6 +998,8 @@ namespace Neo_Hook_Solid
                                              system_rhs);
     }
 
+    // This function needs to exist in the base class for Workstream to work
+    // with a reference to the base class.
   protected:
     virtual void
     assemble_system_tangent_residual_one_cell(
@@ -928,6 +1010,9 @@ namespace Neo_Hook_Solid
       AssertThrow(false, ExcPureFunctionCalled());
     }
 
+    // Next we assemble the Neumann contribution. We first check to see, if the
+    // cell face exists on a boundary on which the stress is applied i.e. in our
+    // case the coupling boundary.
     void
     assemble_neumann_contribution_one_cell(
       const typename DoFHandler<dim>::active_cell_iterator &cell,
@@ -942,22 +1027,27 @@ namespace Neo_Hook_Solid
       const unsigned int &              interf_id =
         data.solid->coupling_functions.deal_boundary_interface_id;
 
-      for (unsigned int face = 0; face < GeometryInfo<dim>::faces_per_cell;
-           ++face)
-        if (cell->face(face)->at_boundary() == true &&
-            cell->face(face)->boundary_id() == interf_id)
+      for (const auto &face : cell->face_iterators())
+        if (face->at_boundary() == true && face->boundary_id() == interf_id)
           {
             scratch.fe_face_values_ref.reinit(cell, face);
 
             // Initialize vector for values at each quad point
             std::vector<Tensor<1, dim, NumberType>> local_stress(n_q_points_f);
 
+            // Then, we extract the proper values from the global
+            // external_stress vector, which has already been filled with the
+            // coupling data
             scratch.fe_face_values_ref[u_fe].get_function_values(
               scratch.external_stress, local_stress);
 
             for (unsigned int f_q_point = 0; f_q_point < n_q_points_f;
                  ++f_q_point)
               {
+                // In the next step, we perform a pull_back operation, since our
+                // Fluid participant usually works with ALE methods and the
+                // structure solver here assembles everything in reference
+                // coniguration
                 const Tensor<2, dim, NumberType> F =
                   Physics::Elasticity::Kinematics::F(
                     scratch.solution_grads_u_total[f_q_point]);
@@ -1005,6 +1095,7 @@ namespace Neo_Hook_Solid
       ScratchData_ASM &                                     scratch,
       PerTaskData_ASM &                                     data)
     {
+      // Aliases for data referenced from the Solid class
       const unsigned int & n_q_points           = data.solid->n_q_points;
       const unsigned int & dofs_per_cell        = data.solid->dofs_per_cell;
       const FESystem<dim> &fe                   = data.solid->fe;
@@ -1025,6 +1116,9 @@ namespace Neo_Hook_Solid
                  ->quadrature_point_history.get_data(cell);
       Assert(lqph.size() == n_q_points, ExcInternalError());
 
+      // We first need to find the solution gradients at quadrature points
+      // inside the current cell and then we update each local QP using the
+      // displacement gradient:
       scratch.fe_values_ref[u_fe].get_function_gradients(
         scratch.solution_total, scratch.solution_grads_u_total);
 
@@ -1034,8 +1128,15 @@ namespace Neo_Hook_Solid
       // Const in the whole domain, so we call it once for each cell
       const double rho = lqph[0]->get_rho();
 
+      // Now we build the local cell stiffness matrix. Since the global and
+      // local system matrices are symmetric, we can exploit this property by
+      // building only the lower half of the local matrix and copying the values
+      // to the upper half.
       for (unsigned int q_point = 0; q_point < n_q_points; ++q_point)
         {
+          // In doing so, we first extract some configuration dependent
+          // variables from our QPH history objects for the current quadrature
+          // point.
           // Get kinematic variables
           const Tensor<2, dim, NumberType> &grad_u =
             scratch.solution_grads_u_total[q_point];
@@ -1155,7 +1256,11 @@ namespace Neo_Hook_Solid
     }
   };
 
-
+  // Since we use TBB for assembly, we simply setup a copy of the data
+  // structures required for the process and pass them, along with the memory
+  // addresses of the assembly functions to the WorkStream object for
+  // processing. Note that we must ensure that the matrix is reset before any
+  // assembly operations can occur.
   template <int dim, typename NumberType>
   void
   Solid<dim, NumberType>::assemble_system(
@@ -1200,7 +1305,11 @@ namespace Neo_Hook_Solid
     timer.leave_subsection();
   }
 
-
+  // The constraints for this problem are simple to describe. However, since we
+  // are dealing with an iterative Newton method, it should be noted that any
+  // displacement constraints should only be specified at the zeroth iteration
+  // and subsequently no additional contributions are to be made since the
+  // constraints are already exactly satisfied.
   template <int dim, typename NumberType>
   void
   Solid<dim, NumberType>::make_constraints(const int &it_nr)
@@ -1214,7 +1323,8 @@ namespace Neo_Hook_Solid
 
 
     {
-      const int boundary_id = 1;
+      // Fix in every direction
+      const int boundary_id = clamped_boundary_id;
 
       if (apply_dirichlet_bc == true)
         VectorTools::interpolate_boundary_values(dof_handler_ref,
@@ -1234,7 +1344,9 @@ namespace Neo_Hook_Solid
 
     if (dim == 3)
       {
-        const int                        boundary_id = 2;
+        // The FEValuesExtractors allow to fix only a certain direction, in this
+        // case the z-direction
+        const int                        boundary_id = clamped_boundary_id;
         const FEValuesExtractors::Scalar z_displacement(2);
 
         if (apply_dirichlet_bc == true)
@@ -1256,6 +1368,7 @@ namespace Neo_Hook_Solid
     constraints.close();
   }
 
+  // Finally, solve the system
   template <int dim, typename NumberType>
   std::pair<unsigned int, double>
   Solid<dim, NumberType>::solve_linear_system(
@@ -1315,6 +1428,8 @@ namespace Neo_Hook_Solid
     return std::make_pair(lin_it, lin_res);
   }
 
+
+  // Write ouput files
   template <int dim, typename NumberType>
   void
   Solid<dim, NumberType>::output_results() const
@@ -1327,6 +1442,7 @@ namespace Neo_Hook_Solid
     data_out.set_flags(flags);
 
     data_out.attach_dof_handler(dof_handler_ref);
+    // Postprocessed data is provided by the Postprocessor
     Postprocessor<dim> postprocessor;
     data_out.add_data_vector(total_displacement, postprocessor);
 
@@ -1339,8 +1455,8 @@ namespace Neo_Hook_Solid
     data_out.build_patches(q_mapping, degree, DataOut<dim>::curved_inner_cells);
 
     std::ostringstream filename;
-    filename << "solution-" << time.get_timestep() / parameters.output_interval
-             << ".vtk";
+    filename << case_path << "solution-"
+             << time.get_timestep() / parameters.output_interval << ".vtk";
 
     std::ofstream output(filename.str().c_str());
     data_out.write_vtk(output);
