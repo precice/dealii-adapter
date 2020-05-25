@@ -3,7 +3,8 @@
     <img src="https://travis-ci.org/precice/dealii-adapter.svg?branch=master" alt="Build status">
 </a>
 
-A coupled structural solver written with the C++ finite element library deal.II
+Coupled structural solvers written with the C++ finite element library deal.II. The coupled codes build on different deal.II tutorials:
+The linear-elastic solver is based on the step-8 tutorial, the nonlinear solver builds on previous work of Jean-Paul Pelteret and Andrew McBride in their deal.II code gallery program 'Quasi-Static Finite-Strain Compressible Elasticity.' Documentation for usage and application can be found in the source code, on the deal.II tutorial documentation and the dealii-adapter wiki pages.
 
 ## Start here
 Our [wiki](https://github.com/precice/dealii-adapter/wiki) will help you start. If you are missing something, [let us know](https://www.precice.org/resources/#contact).
