@@ -35,280 +35,15 @@
 #include <fstream>
 #include <iostream>
 
+#include "include/coupling_functions.h"
+#include "include/parameter_handling.h"
+#include "include/time.h"
 #include "precice/SolverInterface.hpp"
 
-namespace adapter
+namespace Linear_Elasticity
 {
   using namespace dealii;
 
-  namespace Parameters
-  {
-    // TODO: Add more parameters
-    struct Time
-    {
-      double delta_t;
-      double end_time;
-      double theta;
-      int    output_interval;
-
-      static void
-      declare_parameters(ParameterHandler &prm);
-
-      void
-      parse_parameters(ParameterHandler &prm);
-    };
-
-    void
-    Time::declare_parameters(ParameterHandler &prm)
-    {
-      prm.enter_subsection("Time");
-      {
-        prm.declare_entry("End time", "1", Patterns::Double(), "End time");
-
-        prm.declare_entry("Time step size",
-                          "0.1",
-                          Patterns::Double(),
-                          "Time step size");
-
-        prm.declare_entry("Output interval",
-                          "1",
-                          Patterns::Integer(0),
-                          "Write results every x timesteps");
-
-        prm.declare_entry("theta",
-                          "0.5",
-                          Patterns::Double(0, 1),
-                          "Time integration scheme");
-      }
-      prm.leave_subsection();
-    }
-
-    void
-    Time::parse_parameters(ParameterHandler &prm)
-    {
-      prm.enter_subsection("Time");
-      {
-        end_time        = prm.get_double("End time");
-        delta_t         = prm.get_double("Time step size");
-        output_interval = prm.get_integer("Output interval");
-        theta           = prm.get_double("theta");
-      }
-      prm.leave_subsection();
-    }
-
-    struct Materials
-    {
-      double mu;
-      double lambda;
-      double rho;
-
-      static void
-      declare_parameters(ParameterHandler &prm);
-
-      void
-      parse_parameters(ParameterHandler &prm);
-    };
-
-    void
-    Materials::declare_parameters(ParameterHandler &prm)
-    {
-      prm.enter_subsection("Material properties");
-      {
-        prm.declare_entry("mu", "0.5e6", Patterns::Double(), "mu");
-
-        prm.declare_entry("lambda", "2e6", Patterns::Double(), "lambda");
-
-        prm.declare_entry("density", "1000", Patterns::Double(0.0), "density");
-      }
-      prm.leave_subsection();
-    }
-
-    void
-    Materials::parse_parameters(ParameterHandler &prm)
-    {
-      prm.enter_subsection("Material properties");
-      {
-        mu     = prm.get_double("mu");
-        lambda = prm.get_double("lambda");
-        rho    = prm.get_double("density");
-      }
-      prm.leave_subsection();
-    }
-
-    struct FESystem
-    {
-      unsigned int poly_degree;
-      unsigned int quad_order;
-
-      static void
-      declare_parameters(ParameterHandler &prm);
-
-      void
-      parse_parameters(ParameterHandler &prm);
-    };
-
-
-    void
-    FESystem::declare_parameters(ParameterHandler &prm)
-    {
-      prm.enter_subsection("Finite element system");
-      {
-        prm.declare_entry("Polynomial degree",
-                          "1",
-                          Patterns::Integer(0),
-                          "Polynomial degree of the FE system");
-
-        prm.declare_entry("Quadrature order",
-                          "3",
-                          Patterns::Integer(0),
-                          "Gauss quadrature order");
-      }
-      prm.leave_subsection();
-    }
-
-    void
-    FESystem::parse_parameters(ParameterHandler &prm)
-    {
-      prm.enter_subsection("Finite element system");
-      {
-        poly_degree = prm.get_integer("Polynomial degree");
-        quad_order  = prm.get_integer("Quadrature order");
-      }
-      prm.leave_subsection();
-    }
-
-    struct precice_configuration
-    {
-      std::string  scenario;
-      bool         enable_precice;
-      std::string  config_file;
-      std::string  participant;
-      std::string  node_mesh;
-      std::string  face_mesh;
-      std::string  read_data_name;
-      std::string  write_data_name;
-      unsigned int interface_mesh_id;
-
-      static void
-      declare_parameters(ParameterHandler &prm);
-
-      void
-      parse_parameters(ParameterHandler &prm);
-    };
-
-
-    void
-    precice_configuration::declare_parameters(ParameterHandler &prm)
-    {
-      prm.enter_subsection("precice configuration");
-      {
-        prm.declare_entry("Scenario",
-                          "FSI3",
-                          Patterns::Selection("FSI3|PF"),
-                          "Cases: FSI3 or PF for perpendicular flap");
-        prm.declare_entry(
-          "Enable precice",
-          "true",
-          Patterns::Bool(),
-          "Whether preCICE is used for coupling to another solver");
-        prm.declare_entry("precice config-file",
-                          "precice-config.xml",
-                          Patterns::Anything(),
-                          "Name of the precice configuration file");
-        prm.declare_entry(
-          "Participant",
-          "dealiisolver",
-          Patterns::Anything(),
-          "Name of the participant in the precice-config.xml file");
-        prm.declare_entry(
-          "Node mesh name",
-          "dealii-mesh-nodes",
-          Patterns::Anything(),
-          "Name of the node based coupling mesh in the precice-config.xml file");
-        prm.declare_entry(
-          "Face mesh name",
-          "dealii-mesh-faces",
-          Patterns::Anything(),
-          "Name of the face based coupling mesh in the precice-config.xml file");
-        prm.declare_entry(
-          "Read data name",
-          "received-data",
-          Patterns::Anything(),
-          "Name of the read data in the precice-config.xml file");
-        prm.declare_entry(
-          "Write data name",
-          "calculated-data",
-          Patterns::Anything(),
-          "Name of the write data in the precice-config.xml file");
-        prm.declare_entry(
-          "Interface mesh ID",
-          "1",
-          Patterns::Integer(0),
-          "Boundary mesh ID of the coupling interface in deal.II");
-      }
-      prm.leave_subsection();
-    }
-
-    void
-    precice_configuration::parse_parameters(ParameterHandler &prm)
-    {
-      prm.enter_subsection("precice configuration");
-      {
-        scenario          = prm.get("Scenario");
-        enable_precice    = prm.get_bool("Enable precice");
-        config_file       = prm.get("precice config-file");
-        participant       = prm.get("Participant");
-        node_mesh         = prm.get("Node mesh name");
-        face_mesh         = prm.get("Face mesh name");
-        read_data_name    = prm.get("Read data name");
-        write_data_name   = prm.get("Write data name");
-        interface_mesh_id = prm.get_integer("Interface mesh ID");
-      }
-      prm.leave_subsection();
-    }
-
-
-    struct AllParameters : public Time,
-                           public Materials,
-                           public FESystem,
-                           public precice_configuration
-    {
-      AllParameters(const std::string &input_file);
-
-      static void
-      declare_parameters(ParameterHandler &prm);
-
-      void
-      parse_parameters(ParameterHandler &prm);
-    };
-
-    AllParameters::AllParameters(const std::string &input_file)
-    {
-      ParameterHandler prm;
-      declare_parameters(prm);
-      prm.parse_input(input_file);
-      parse_parameters(prm);
-    }
-
-    void
-    AllParameters::declare_parameters(ParameterHandler &prm)
-    {
-      Time::declare_parameters(prm);
-      Materials::declare_parameters(prm);
-      FESystem::declare_parameters(prm);
-      precice_configuration::declare_parameters(prm);
-    }
-
-    void
-    AllParameters::parse_parameters(ParameterHandler &prm)
-    {
-      Time::parse_parameters(prm);
-      Materials::parse_parameters(prm);
-      FESystem::parse_parameters(prm);
-      precice_configuration::parse_parameters(prm);
-    }
-
-  } // namespace Parameters
   // evaluate strains as a tensor in the data out object
   template <int dim>
   class StrainPostprocessor : public DataPostprocessorTensor<dim>
@@ -341,82 +76,6 @@ namespace adapter
   };
 
 
-  // Class for the simulation time
-  class Time
-  {
-  public:
-    Time(const double time_end, const double delta_t)
-      : timestep(0)
-      , time_current(0.0)
-      , time_end(time_end)
-      , delta_t(delta_t)
-    {
-      n_timesteps = time_end / delta_t;
-
-      if ((time_end / delta_t) - n_timesteps > 1e-12)
-        {
-          ++n_timesteps;
-          std::cerr
-            << "  Warning: Timestep size is not a multiple of the end time.\n"
-            << "           Simulation will be terminated at t = "
-            << n_timesteps * delta_t << "\n"
-            << std::endl;
-        }
-    }
-
-    virtual ~Time()
-    {}
-
-    double
-    current() const
-    {
-      return time_current;
-    }
-    double
-    end() const
-    {
-      return time_end;
-    }
-    double
-    get_delta_t() const
-    {
-      return delta_t;
-    }
-    unsigned int
-    get_timestep() const
-    {
-      return timestep;
-    }
-
-    unsigned int
-    get_n_timesteps() const
-    {
-      return n_timesteps;
-    }
-
-    void
-    increment()
-    {
-      time_current += delta_t;
-      ++timestep;
-    }
-
-    void
-    restore()
-    {
-      time_current -= delta_t;
-      --timestep;
-    }
-
-  private:
-    unsigned int timestep;
-    double       time_current;
-    const double time_end;
-    const double delta_t;
-    unsigned int n_timesteps;
-  };
-
-
   template <int dim>
   class CoupledElastoDynamics
   {
@@ -443,28 +102,16 @@ namespace adapter
     output_results(const unsigned int timestep) const;
     void
     compute_timesteps();
-    // preCICE related functions
-    void
-    initialize_precice();
-    void
-    advance_precice();
-    void
-    extract_relevant_displacements(std::vector<double> &precice_displacements);
-    void
-    save_old_state();
-    void
-    reload_old_state();
 
 
-    Parameters::AllParameters parameters;
+    Adapter::Parameters::AllParameters parameters;
 
     // grid related variables
     Triangulation<dim> triangulation;
-    unsigned int       global_refinement;
     unsigned int       clamped_mesh_id;
     unsigned int       out_of_plane_clamped_mesh_id;
 
-    Time            time;
+    Adapter::Time   time;
     DoFHandler<dim> dof_handler;
 
     FESystem<dim>        fe;
@@ -491,36 +138,12 @@ namespace adapter
     double         gravity_value;
     int            gravity_direction;
 
-    // variables for implicit coupling
-    Vector<double> old_state_old_velocity;
-    Vector<double> old_state_velocity;
-    Vector<double> old_state_old_displacement;
-    Vector<double> old_state_displacement;
-    Vector<double> old_state_old_forces;
+    Adapter::PreciceDealCoupling::CouplingFunctions<dim, Vector<double>>
+      coupling_functions;
 
-    // preCICE related initializations
-    int node_mesh_id;
-    int face_mesh_id;
-    int forces_data_id;
-    int displacements_data_id;
-    int n_interface_nodes;
-    int n_interface_faces;
-
-    std::vector<double> precice_forces;
-    std::vector<double> precice_displacements;
-    std::vector<double> interface_nodes_positions;
-    std::vector<int>    interface_nodes_ids;
-    std::vector<double> interface_faces_positions;
-    std::vector<int>    interface_faces_ids;
-
-
-    IndexSet coupling_dofs;
-
-    // preCICE API
-    precice::SolverInterface precice;
-
+    std::vector<Vector<double> *> state_variables;
     // for the output directory
-    std::string case_path;
+    const std::string case_path;
   };
 
 
@@ -533,7 +156,7 @@ namespace adapter
     , dof_handler(triangulation)
     , fe(FE_Q<dim>(parameters.poly_degree), dim)
     , mapping(MappingQGeneric<dim>(parameters.poly_degree))
-    , precice(parameters.participant, parameters.config_file, 0, 1)
+    , coupling_functions(parameters)
     , case_path(case_path)
   {}
 
@@ -556,12 +179,8 @@ namespace adapter
     Point<dim> point_tip;
 
     // boundary IDs are obtained through colorize = true
-    uint id_flap_long_bottom;
-    uint id_flap_long_top;
-    uint id_flap_short_bottom;
-    uint id_flap_short_top;
-    uint id_flap_out_of_plane_bottom;
-    uint id_flap_out_of_plane_top;
+    uint id_flap_long_bottom, id_flap_long_top, id_flap_short_bottom,
+      id_flap_short_top, id_flap_out_of_plane_bottom, id_flap_out_of_plane_top;
 
 
     if (parameters.scenario == "FSI3")
@@ -617,15 +236,14 @@ namespace adapter
     if (dim == 3)
       repetitions[2] = n_z;
 
-    // refine all cells global_refinement times
-    global_refinement = 0;
-
-
     GridGenerator::subdivided_hyper_rectangle(triangulation,
                                               repetitions,
                                               point_bottom,
                                               point_tip,
                                               /*colorize*/ true);
+
+    // refine all cells global_refinement times
+    const unsigned int global_refinement = 0;
 
     triangulation.refine_global(global_refinement);
 
@@ -636,18 +254,15 @@ namespace adapter
     // boundaries interface ID is set in the parameter file
     clamped_mesh_id              = 0;
     out_of_plane_clamped_mesh_id = 4;
-
+    const unsigned int neumann_id =
+      coupling_functions.deal_boundary_interface_id;
     // the IDs must not be the same:
     std::string error_message(
       "The interface_id cannot be the same as the clamped one");
-    Assert(clamped_mesh_id != parameters.interface_mesh_id,
-           ExcMessage(error_message));
-    Assert(out_of_plane_clamped_mesh_id != parameters.interface_mesh_id,
+    Assert(clamped_mesh_id != neumann_id, ExcMessage(error_message));
+    Assert(out_of_plane_clamped_mesh_id != neumann_id,
            ExcMessage(error_message));
 
-
-    // count simultaniously the relevant coupling faces
-    n_interface_faces = 0;
 
     typename Triangulation<dim>::active_cell_iterator cell = triangulation
                                                                .begin_active(),
@@ -656,34 +271,23 @@ namespace adapter
     for (; cell != endc; ++cell)
       for (unsigned int face = 0; face < GeometryInfo<dim>::faces_per_cell;
            ++face)
-        {
-          if (cell->face(face)->at_boundary() == true)
-            {
-              // boundaries for the interface
-              if (cell->face(face)->boundary_id() == id_flap_short_top ||
-                  cell->face(face)->boundary_id() == id_flap_long_bottom ||
-                  cell->face(face)->boundary_id() == id_flap_long_top)
-                {
-                  cell->face(face)->set_boundary_id(
-                    parameters.interface_mesh_id);
-                  ++n_interface_faces;
-                }
-              // boundaries clamped in all directions
-              else if (cell->face(face)->boundary_id() == id_flap_short_bottom)
-                {
-                  cell->face(face)->set_boundary_id(clamped_mesh_id);
-                }
-              // boundaries clamped out-of-plane (z) direction
-              else if (cell->face(face)->boundary_id() ==
-                         id_flap_out_of_plane_bottom ||
-                       cell->face(face)->boundary_id() ==
-                         id_flap_out_of_plane_top)
-                {
-                  cell->face(face)->set_boundary_id(
-                    out_of_plane_clamped_mesh_id);
-                }
-            }
-        }
+        if (cell->face(face)->at_boundary() == true)
+          {
+            // boundaries for the interface
+            if (cell->face(face)->boundary_id() == id_flap_short_top ||
+                cell->face(face)->boundary_id() == id_flap_long_bottom ||
+                cell->face(face)->boundary_id() == id_flap_long_top)
+              cell->face(face)->set_boundary_id(neumann_id);
+            // boundaries clamped in all directions
+            else if (cell->face(face)->boundary_id() == id_flap_short_bottom)
+              cell->face(face)->set_boundary_id(clamped_mesh_id);
+            // boundaries clamped out-of-plane (z) direction
+            else if (cell->face(face)->boundary_id() ==
+                       id_flap_out_of_plane_bottom ||
+                     cell->face(face)->boundary_id() ==
+                       id_flap_out_of_plane_top)
+              cell->face(face)->set_boundary_id(out_of_plane_clamped_mesh_id);
+          }
   }
 
   template <int dim>
@@ -730,6 +334,10 @@ namespace adapter
     forces.reinit(dof_handler.n_dofs());
 
     gravitational_force.reinit(dof_handler.n_dofs());
+
+
+    state_variables = {
+      &old_velocity, &velocity, &old_displacement, &displacement, &old_forces};
 
     // loads at time 0
     // TODO: Check, if initial conditions should be set at the beginning
@@ -901,7 +509,8 @@ namespace adapter
         for (unsigned int face = 0; face < GeometryInfo<dim>::faces_per_cell;
              ++face)
           if (cell->face(face)->at_boundary() == true &&
-              cell->face(face)->boundary_id() == parameters.interface_mesh_id)
+              cell->face(face)->boundary_id() ==
+                coupling_functions.deal_boundary_interface_id)
             {
               fe_face_values.reinit(cell, face);
 
@@ -913,9 +522,9 @@ namespace adapter
               // deformed configuration. calculate needed traction from forces
               // according to Nansons formula: we obtain as coupling data: t*da
               // = f and use t_0 = t * da/dA = f/dA
-              for (uint jj = 0; jj < dim; ++jj)
-                spatial_force_vector[jj] =
-                  precice_forces[force_iterator * dim + jj] / surface_area;
+//              for (uint jj = 0; jj < dim; ++jj)
+//                spatial_force_vector[jj] =
+//                  precice_forces[force_iterator * dim + jj] / surface_area;
 
               ++force_iterator;
 
@@ -1089,303 +698,50 @@ namespace adapter
   void
   CoupledElastoDynamics<dim>::compute_timesteps()
   {
-    if (parameters.enable_precice == true)
+    while (coupling_functions.precice.isCouplingOngoing())
       {
-        while (precice.isCouplingOngoing() &&
-               time.get_timestep() < time.get_n_timesteps())
-          {
-            time.increment();
+        time.increment();
 
-            std::cout << "  Time = " << time.current() << " at timestep "
-                      << time.get_timestep() << " of " << time.get_n_timesteps()
-                      << std::endl;
+        std::cout << "  Time = " << time.current() << " at timestep "
+                  << time.get_timestep() << std::endl;
 
-            if (precice.isActionRequired(
-                  precice::constants::actionWriteIterationCheckpoint()))
-              {
-                save_old_state();
-                precice.markActionFulfilled(
-                  precice::constants::actionWriteIterationCheckpoint());
-              }
+        coupling_functions.save_current_state_if_required(state_variables,
+                                                          time);
 
-            assemble_rhs();
+        assemble_rhs();
 
-            solve();
+        solve();
 
-            update_displacement();
+        update_displacement();
 
-            advance_precice();
+        coupling_functions.advance_precice(displacement,
+                                           forces,
+                                           time.get_delta_t());
 
-            if (precice.isActionRequired(
-                  precice::constants::actionReadIterationCheckpoint()))
-              {
-                reload_old_state();
-                precice.markActionFulfilled(
-                  precice::constants::actionReadIterationCheckpoint());
-              }
+        coupling_functions.reload_old_state_if_required(state_variables, time);
 
-            if (precice.isTimeWindowComplete() &&
-                time.get_timestep() % parameters.output_interval == 0)
-              output_results(time.get_timestep());
-          }
-
-        precice.finalize();
+        if (coupling_functions.precice.isTimeWindowComplete() &&
+            time.get_timestep() % parameters.output_interval == 0)
+          output_results(time.get_timestep());
       }
-    else
-      while (time.get_timestep() < time.get_n_timesteps())
-        {
-          time.increment();
-
-          std::cout << "  Time = " << time.current() << " at timestep "
-                    << time.get_timestep() << " of " << time.get_n_timesteps()
-                    << std::endl;
-
-          assemble_rhs();
-
-          solve();
-
-          update_displacement();
-
-          if (time.get_timestep() % parameters.output_interval == 0)
-            output_results(time.get_timestep());
-        }
+    coupling_functions.precice.finalize();
   }
 
-  template <int dim>
-  void
-  CoupledElastoDynamics<dim>::initialize_precice()
-  {
-    if (parameters.enable_precice == true)
-      {
-        // assert matching dimensions between deal.ii and precice
-        // only valid for the current adapter setup
-        // TODO: Adapt for quasi-2D cases (#5)
-        Assert(dim == precice.getDimensions(),
-               ExcDimensionMismatch(dim, precice.getDimensions()));
-
-        // get precice specific IDs from precice
-        node_mesh_id = precice.getMeshID(parameters.node_mesh);
-        face_mesh_id = precice.getMeshID(parameters.face_mesh);
-        forces_data_id =
-          precice.getDataID(parameters.read_data_name, face_mesh_id);
-        displacements_data_id =
-          precice.getDataID(parameters.write_data_name, node_mesh_id);
-      }
-
-    // initialization is also needed for uncoupled simulation
-    // get the number of interface nodes from deal.ii
-    std::set<types::boundary_id> couplingBoundary;
-    couplingBoundary.insert(parameters.interface_mesh_id);
-    const FEValuesExtractors::Scalar x_displacement(0);
-
-    DoFTools::extract_boundary_dofs(dof_handler,
-                                    fe.component_mask(x_displacement),
-                                    coupling_dofs,
-                                    couplingBoundary);
-    n_interface_nodes = coupling_dofs.n_elements(); // TODO: Adapt
-
-    std::cout << "\t Number of coupling nodes:     " << n_interface_nodes
-              << std::endl;
-
-    precice_displacements.resize(dim * n_interface_nodes);
-    interface_nodes_positions.resize(dim * n_interface_nodes);
-    interface_nodes_ids.resize(n_interface_nodes);
-
-    // same for the face based mesh
-    // number of coupling faces already obtained in the make_grid function
-    precice_forces.resize(dim * n_interface_faces);
-
-    // set a constant value for each direction in case of an uncoupled
-    // simulation
-    if (parameters.enable_precice == false)
-      for (uint it = 0; it < precice_forces.size() / dim; it++)
-        {
-          precice_forces[it * dim]     = 0;
-          precice_forces[it * dim + 1] = 0;
-          if (dim == 3)
-            precice_forces[it * dim + 2] = 0;
-        }
-
-    interface_faces_positions.resize(dim * n_interface_faces);
-    interface_faces_ids.resize(n_interface_faces);
-
-    std::cout << "\t Number of coupling faces:     " << n_interface_faces
-              << std::endl;
-
-
-    if (parameters.enable_precice == true)
-      {
-        // get the coordinates of the interface nodes from deal.ii
-        std::map<types::global_dof_index, Point<dim>> support_points;
-        // TODO: Check mapping: Maybe add the mapping object to get the
-        // coordinates of higher order shape functions
-        DoFTools::map_dofs_to_support_points(MappingQ1<dim>(),
-                                             dof_handler,
-                                             support_points);
-        // support_points contains now the coordinates of all dofs
-        // in the next step, the relevant coordinates are extracted using the
-        // extracted coupling_dofs
-        int node_position_iterator = 0;
-        for (auto element = coupling_dofs.begin();
-             element != coupling_dofs.end();
-             ++element)
-          {
-            for (int jj = 0; jj < dim; ++jj)
-              interface_nodes_positions[node_position_iterator * dim + jj] =
-                support_points[*element][jj];
-
-            ++node_position_iterator;
-          }
-
-        // pass node coordinates to precice
-        precice.setMeshVertices(node_mesh_id,
-                                n_interface_nodes,
-                                interface_nodes_positions.data(),
-                                interface_nodes_ids.data());
-
-        // get the coordinates of the face centers and store them in
-        // interface_faces_positions
-        typename DoFHandler<dim>::active_cell_iterator cell = dof_handler
-                                                                .begin_active(),
-                                                       endc = dof_handler.end();
-
-        int face_position_iterator = 0;
-        for (; cell != endc; ++cell)
-          for (unsigned int face = 0; face < GeometryInfo<dim>::faces_per_cell;
-               ++face)
-            {
-              if (cell->face(face)->at_boundary() &&
-                  (cell->face(face)->boundary_id() ==
-                   parameters.interface_mesh_id))
-                {
-                  for (int jj = 0; jj < dim; ++jj)
-                    interface_faces_positions[face_position_iterator * dim +
-                                              jj] =
-                      cell->face(face)->center()[jj];
-
-                  ++face_position_iterator;
-                }
-            }
-
-
-        // pass face coordinates to precice
-        precice.setMeshVertices(face_mesh_id,
-                                n_interface_faces,
-                                interface_faces_positions.data(),
-                                interface_faces_ids.data());
-
-        precice.initialize();
-
-        // write initial writeData to preCICE
-        if (precice.isActionRequired(
-              precice::constants::actionWriteInitialData()))
-          {
-            // store initial write_data for precice in precice_displacements
-            extract_relevant_displacements(precice_displacements);
-
-            precice.writeBlockVectorData(displacements_data_id,
-                                         n_interface_nodes,
-                                         interface_nodes_ids.data(),
-                                         precice_displacements.data());
-            precice.markActionFulfilled(
-              precice::constants::actionWriteInitialData());
-
-            precice.initializeData();
-          }
-
-        // read initial readData from preCICE for the first time step
-        if (precice.isReadDataAvailable())
-          precice.readBlockVectorData(forces_data_id,
-                                      n_interface_faces,
-                                      interface_faces_ids.data(),
-                                      precice_forces.data());
-      }
-  }
-
-  template <int dim>
-  void
-  CoupledElastoDynamics<dim>::advance_precice()
-  {
-    if (precice.isWriteDataRequired(time.get_delta_t()))
-      {
-        extract_relevant_displacements(precice_displacements);
-        precice.writeBlockVectorData(displacements_data_id,
-                                     n_interface_nodes,
-                                     interface_nodes_ids.data(),
-                                     precice_displacements.data());
-      }
-
-    precice.advance(time.get_delta_t());
-
-    if (precice.isReadDataAvailable())
-      {
-        precice.readBlockVectorData(forces_data_id,
-                                    n_interface_faces,
-                                    interface_faces_ids.data(),
-                                    precice_forces.data());
-      }
-  }
-
-  template <int dim>
-  void
-  CoupledElastoDynamics<dim>::extract_relevant_displacements(
-    std::vector<double> &precice_displacements)
-  {
-    int data_iterator = 0;
-    for (auto element = coupling_dofs.begin(); element != coupling_dofs.end();
-         ++element)
-      {
-        for (int jj = 0; jj < dim; ++jj)
-          precice_displacements[data_iterator * dim + jj] =
-            displacement[*element + jj];
-
-        ++data_iterator;
-      }
-  }
-
-  template <int dim>
-  void
-  CoupledElastoDynamics<dim>::save_old_state()
-  {
-    // store current state for implict coupling
-    old_state_velocity         = velocity;
-    old_state_old_velocity     = old_velocity;
-    old_state_displacement     = displacement;
-    old_state_old_displacement = old_displacement;
-    old_state_old_forces       = old_forces;
-  }
-
-  template <int dim>
-  void
-  CoupledElastoDynamics<dim>::reload_old_state()
-  {
-    // load old state for implicit coupling
-    velocity         = old_state_velocity;
-    old_velocity     = old_state_old_velocity;
-    displacement     = old_state_displacement;
-    old_displacement = old_state_old_displacement;
-    old_forces       = old_state_old_forces;
-
-    time.restore();
-  }
 
   template <int dim>
   void
   CoupledElastoDynamics<dim>::run()
   {
     make_grid();
-
     setup_system();
-
     output_results(time.get_timestep());
 
     assemble_system();
-
-    initialize_precice();
+    coupling_functions.initialize_precice(dof_handler, displacement, forces);
 
     compute_timesteps();
   }
-} // end namespace adapter
+} // namespace Linear_Elasticity
 
 int
 main(int argc, char **argv)
@@ -1408,7 +764,7 @@ main(int argc, char **argv)
       std::string case_path =
         std::string::npos == pos ? "" : parameter_file.substr(0, pos + 1);
 
-      adapter::CoupledElastoDynamics<DIM> elastic_solver(case_path);
+      Linear_Elasticity::CoupledElastoDynamics<DIM> elastic_solver(case_path);
       elastic_solver.run();
     }
   catch (std::exception &exc)
