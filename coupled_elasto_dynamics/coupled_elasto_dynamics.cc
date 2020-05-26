@@ -27,11 +27,9 @@
 #include <deal.II/lac/vector.h>
 
 #include <deal.II/numerics/data_out.h>
-#include <deal.II/numerics/error_estimator.h>
 #include <deal.II/numerics/matrix_tools.h>
 #include <deal.II/numerics/vector_tools.h>
 
-// include for preCICE
 #include <fstream>
 #include <iostream>
 
@@ -262,29 +260,22 @@ namespace Linear_Elasticity
            ExcMessage(error_message));
 
 
-    typename Triangulation<dim>::active_cell_iterator cell = triangulation
-                                                               .begin_active(),
-                                                      endc =
-                                                        triangulation.end();
-    for (; cell != endc; ++cell)
-      for (unsigned int face = 0; face < GeometryInfo<dim>::faces_per_cell;
-           ++face)
-        if (cell->face(face)->at_boundary() == true)
+    for (const auto &cell : triangulation.active_cell_iterators())
+      for (const auto &face : cell->face_iterators())
+        if (face->at_boundary() == true)
           {
             // boundaries for the interface
-            if (cell->face(face)->boundary_id() == id_flap_short_top ||
-                cell->face(face)->boundary_id() == id_flap_long_bottom ||
-                cell->face(face)->boundary_id() == id_flap_long_top)
-              cell->face(face)->set_boundary_id(neumann_id);
+            if (face->boundary_id() == id_flap_short_top ||
+                face->boundary_id() == id_flap_long_bottom ||
+                face->boundary_id() == id_flap_long_top)
+              face->set_boundary_id(neumann_id);
             // boundaries clamped in all directions
-            else if (cell->face(face)->boundary_id() == id_flap_short_bottom)
-              cell->face(face)->set_boundary_id(clamped_mesh_id);
+            else if (face->boundary_id() == id_flap_short_bottom)
+              face->set_boundary_id(clamped_mesh_id);
             // boundaries clamped out-of-plane (z) direction
-            else if (cell->face(face)->boundary_id() ==
-                       id_flap_out_of_plane_bottom ||
-                     cell->face(face)->boundary_id() ==
-                       id_flap_out_of_plane_top)
-              cell->face(face)->set_boundary_id(out_of_plane_clamped_mesh_id);
+            else if (face->boundary_id() == id_flap_out_of_plane_bottom ||
+                     face->boundary_id() == id_flap_out_of_plane_top)
+              face->set_boundary_id(out_of_plane_clamped_mesh_id);
           }
   }
 
@@ -491,12 +482,9 @@ namespace Linear_Elasticity
 
     std::vector<types::global_dof_index> local_dof_indices(dofs_per_cell);
 
-    // in order to convert the array precice forces in a vector format
-    Tensor<1, dim> spatial_force_vector;
-    double         surface_area;
 
-    // looks for the correct value in the array obtained by preCICE
-    int force_iterator = 0;
+    // In order to get the local fe values
+    std::vector<Tensor<1, dim, double>> local_stress(n_face_q_points);
 
     for (const auto &cell : dof_handler.active_cell_iterators())
       {
@@ -504,44 +492,29 @@ namespace Linear_Elasticity
 
         // assembling the right-hand side force vector each timestep
         // by applying contributions from the coupling interface
-        for (unsigned int face = 0; face < GeometryInfo<dim>::faces_per_cell;
-             ++face)
-          if (cell->face(face)->at_boundary() == true &&
-              cell->face(face)->boundary_id() ==
+        for (const auto &face : cell->face_iterators())
+          if (face->at_boundary() == true &&
+              face->boundary_id() ==
                 coupling_functions.deal_boundary_interface_id)
             {
               fe_face_values.reinit(cell, face);
+              // Extract from global stress vector
+              // In contrast to the nonlinear solver, no pull back is needed.
+              // The equilibrium is stated in reference configuration, but only
+              // valid for very small deformations
+              fe_face_values.get_function_values(forces, local_stress);
 
-              // get face area dA, in order to apply Nansons formula
-              surface_area = cell->face(face)->measure();
+              for (unsigned int f_q_point = 0; f_q_point < n_face_q_points;
+                   ++f_q_point)
+                for (unsigned int i = 0; i < dofs_per_cell; ++i)
+                  {
+                    const unsigned int component_i =
+                      fe.system_to_component_index(i).first;
 
-              // store coupling data in a traction vector
-              // obtained forces are (according to OpenFOAM) measured in the
-              // deformed configuration. calculate needed traction from forces
-              // according to Nansons formula: we obtain as coupling data: t*da
-              // = f and use t_0 = t * da/dA = f/dA
-              //              for (uint jj = 0; jj < dim; ++jj)
-              //                spatial_force_vector[jj] =
-              //                  precice_forces[force_iterator * dim + jj] /
-              //                  surface_area;
-
-              ++force_iterator;
-
-              for (unsigned int face_q_point = 0;
-                   face_q_point < n_face_q_points;
-                   ++face_q_point)
-                {
-                  for (unsigned int i = 0; i < dofs_per_cell; ++i)
-                    {
-                      const unsigned int component_i =
-                        fe.system_to_component_index(i).first;
-
-                      cell_rhs(i) +=
-                        fe_face_values.shape_value(i, face_q_point) *
-                        spatial_force_vector[component_i] *
-                        fe_face_values.JxW(face_q_point);
-                    }
-                }
+                    cell_rhs(i) += fe_face_values.shape_value(i, f_q_point) *
+                                   local_stress[f_q_point][component_i] *
+                                   fe_face_values.JxW(f_q_point);
+                  }
             }
 
         // local dofs to global
@@ -711,8 +684,9 @@ namespace Linear_Elasticity
 
     while (coupling_functions.precice.isCouplingOngoing())
       {
-        std::cout << "  Time = " << time.current() << " at timestep "
-                  << time.get_timestep() << std::endl;
+        std::cout << std::endl
+                  << "Timestep " << time.get_timestep() << " @ "
+                  << time.current() << "s" << std::endl;
 
         coupling_functions.save_current_state_if_required(state_variables,
                                                           time);
