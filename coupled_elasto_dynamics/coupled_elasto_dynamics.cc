@@ -478,13 +478,12 @@ namespace Linear_Elasticity
     const unsigned int dofs_per_cell   = fe.dofs_per_cell;
     const unsigned int n_face_q_points = face_quadrature_formula.size();
 
-    Vector<double> cell_rhs(dofs_per_cell);
-
+    Vector<double>                       cell_rhs(dofs_per_cell);
     std::vector<types::global_dof_index> local_dof_indices(dofs_per_cell);
 
 
     // In order to get the local fe values
-    std::vector<Tensor<1, dim, double>> local_stress(n_face_q_points);
+    std::vector<Vector<double>> local_stress(n_face_q_points);
 
     for (const auto &cell : dof_handler.active_cell_iterators())
       {
@@ -499,7 +498,7 @@ namespace Linear_Elasticity
             {
               fe_face_values.reinit(cell, face);
               // Extract from global stress vector
-              // In contrast to the nonlinear solver, no pull back is needed.
+              // In contrast to the nonlinear solver, no pull back is performed.
               // The equilibrium is stated in reference configuration, but only
               // valid for very small deformations
               fe_face_values.get_function_values(forces, local_stress);
@@ -663,7 +662,9 @@ namespace Linear_Elasticity
       std::to_string(time.get_timestep() / parameters.output_interval) +
       ".vtk");
     data_out.write_vtk(output);
-    std::cout << "\t Output written to solution-" + std::to_string(timestep) +
+    std::cout << "\t Output written to solution-" +
+                   std::to_string(time.get_timestep() /
+                                  parameters.output_interval) +
                    ".vtk \n"
               << std::endl;
   }
