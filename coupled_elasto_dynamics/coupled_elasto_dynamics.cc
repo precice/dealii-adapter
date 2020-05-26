@@ -99,9 +99,7 @@ namespace Linear_Elasticity
     void
     update_displacement();
     void
-    output_results(const unsigned int timestep) const;
-    void
-    compute_timesteps();
+    output_results() const;
 
 
     Adapter::Parameters::AllParameters parameters;
@@ -522,9 +520,10 @@ namespace Linear_Elasticity
               // deformed configuration. calculate needed traction from forces
               // according to Nansons formula: we obtain as coupling data: t*da
               // = f and use t_0 = t * da/dA = f/dA
-//              for (uint jj = 0; jj < dim; ++jj)
-//                spatial_force_vector[jj] =
-//                  precice_forces[force_iterator * dim + jj] / surface_area;
+              //              for (uint jj = 0; jj < dim; ++jj)
+              //                spatial_force_vector[jj] =
+              //                  precice_forces[force_iterator * dim + jj] /
+              //                  surface_area;
 
               ++force_iterator;
 
@@ -651,7 +650,7 @@ namespace Linear_Elasticity
 
   template <int dim>
   void
-  CoupledElastoDynamics<dim>::output_results(const unsigned int timestep) const
+  CoupledElastoDynamics<dim>::output_results() const
   {
     // compute the strains save it in the outputfiles
     StrainPostprocessor<dim> strain_u;
@@ -686,22 +685,32 @@ namespace Linear_Elasticity
         "This needs to be located in your case directory, where the parameter file is located as well."));
 
     // store all files in a seperate folder called dealii_ouput
-    std::ofstream output(case_path + "dealii_output/solution-" +
-                         std::to_string(timestep) + ".vtk");
+    std::ofstream output(
+      case_path + "dealii_output/solution-" +
+      std::to_string(time.get_timestep() / parameters.output_interval) +
+      ".vtk");
     data_out.write_vtk(output);
     std::cout << "\t Output written to solution-" + std::to_string(timestep) +
                    ".vtk \n"
               << std::endl;
   }
 
+
+
   template <int dim>
   void
-  CoupledElastoDynamics<dim>::compute_timesteps()
+  CoupledElastoDynamics<dim>::run()
   {
+    make_grid();
+    setup_system();
+    output_results();
+    time.increment();
+
+    assemble_system();
+    coupling_functions.initialize_precice(dof_handler, displacement, forces);
+
     while (coupling_functions.precice.isCouplingOngoing())
       {
-        time.increment();
-
         std::cout << "  Time = " << time.current() << " at timestep "
                   << time.get_timestep() << std::endl;
 
@@ -718,28 +727,15 @@ namespace Linear_Elasticity
                                            forces,
                                            time.get_delta_t());
 
+        time.increment();
+
         coupling_functions.reload_old_state_if_required(state_variables, time);
 
         if (coupling_functions.precice.isTimeWindowComplete() &&
             time.get_timestep() % parameters.output_interval == 0)
-          output_results(time.get_timestep());
+          output_results();
       }
     coupling_functions.precice.finalize();
-  }
-
-
-  template <int dim>
-  void
-  CoupledElastoDynamics<dim>::run()
-  {
-    make_grid();
-    setup_system();
-    output_results(time.get_timestep());
-
-    assemble_system();
-    coupling_functions.initialize_precice(dof_handler, displacement, forces);
-
-    compute_timesteps();
   }
 } // namespace Linear_Elasticity
 
