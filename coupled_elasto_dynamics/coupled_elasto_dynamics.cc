@@ -2,6 +2,7 @@
 #include <deal.II/base/parameter_handler.h>
 #include <deal.II/base/quadrature_lib.h>
 #include <deal.II/base/tensor.h>
+#include <deal.II/base/timer.h>
 
 #include <deal.II/dofs/dof_accessor.h>
 #include <deal.II/dofs/dof_handler.h>
@@ -108,8 +109,9 @@ namespace Linear_Elasticity
     unsigned int       clamped_mesh_id;
     unsigned int       out_of_plane_clamped_mesh_id;
 
-    Adapter::Time   time;
-    DoFHandler<dim> dof_handler;
+    Adapter::Time       time;
+    mutable TimerOutput timer;
+    DoFHandler<dim>     dof_handler;
 
     FESystem<dim>        fe;
     MappingQGeneric<dim> mapping;
@@ -151,6 +153,7 @@ namespace Linear_Elasticity
     const std::string &case_path)
     : parameters(case_path + "parameters.prm")
     , time(parameters.end_time, parameters.delta_t)
+    , timer(std::cout, TimerOutput::summary, TimerOutput::wall_times)
     , dof_handler(triangulation)
     , fe(FE_Q<dim>(parameters.poly_degree), dim)
     , mapping(MappingQGeneric<dim>(parameters.poly_degree))
@@ -469,6 +472,8 @@ namespace Linear_Elasticity
     std::cout << "\t Assemble system " << std::endl;
     system_rhs = 0.0;
 
+    timer.enter_subsection("Assemble rhs");
+
     // quadrature formula for integration over faces (dim-1)
     QGauss<dim - 1> face_quadrature_formula(quad_order);
 
@@ -590,12 +595,16 @@ namespace Linear_Elasticity
                                        system_matrix,
                                        velocity,
                                        system_rhs);
+
+    timer.leave_subsection("Assemble rhs");
   }
 
   template <int dim>
   void
   CoupledElastoDynamics<dim>::solve()
   {
+    timer.enter_subsection("Solve system");
+
     const std::string solver_type = "Direct";
 
     uint   lin_it;
@@ -635,6 +644,8 @@ namespace Linear_Elasticity
     std::cout << "\t     No of iterations:\t" << lin_it
               << "\n \t     Final residual:\t" << lin_res << std::endl;
     hanging_node_constraints.distribute(velocity);
+
+    timer.leave_subsection("Solve system");
   }
 
   template <int dim>
@@ -651,6 +662,7 @@ namespace Linear_Elasticity
   void
   CoupledElastoDynamics<dim>::output_results() const
   {
+    timer.enter_subsection("Output results");
     // compute the strains save it in the outputfiles
     StrainPostprocessor<dim> strain_u;
 
@@ -694,6 +706,7 @@ namespace Linear_Elasticity
                                   parameters.output_interval) +
                    ".vtk \n"
               << std::endl;
+    timer.leave_subsection("Output results");
   }
 
 
