@@ -470,7 +470,7 @@ namespace Linear_Elasticity
   void
   CoupledElastoDynamics<dim>::assemble_rhs()
   {
-    std::cout << "\t Assemble system " << std::endl;
+    std::cout << "\t Assemble rhs " << std::endl;
     system_rhs = 0.0;
 
     timer.enter_subsection("Assemble rhs");
@@ -492,7 +492,8 @@ namespace Linear_Elasticity
 
 
     // In order to get the local fe values
-    std::vector<Vector<double>> local_stress(n_face_q_points);
+    std::vector<Vector<double>> local_stress(n_face_q_points,
+                                             Vector<double>(dim));
 
     for (const auto &cell : dof_handler.active_cell_iterators())
       {
