@@ -102,7 +102,7 @@ namespace Linear_Elasticity
     output_results() const;
 
 
-    Adapter::Parameters::AllParameters parameters;
+    Parameters::AllParameters parameters;
 
     // grid related variables
     Triangulation<dim> triangulation;
@@ -139,7 +139,7 @@ namespace Linear_Elasticity
     int            gravity_direction;
 
     Adapter::PreciceDealCoupling::
-      CouplingFunctions<dim, Vector<double>, Adapter::Parameters::AllParameters>
+      CouplingFunctions<dim, Vector<double>, Parameters::AllParameters>
         coupling_functions;
 
     std::vector<Vector<double> *> state_variables;

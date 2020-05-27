@@ -3,7 +3,7 @@
 
 #include <deal.II/base/parameter_handler.h>
 
-namespace Adapter
+namespace Linear_Elasticity
 {
   using namespace dealii;
 
@@ -262,6 +262,6 @@ namespace Adapter
       PreciceAdapterConfiguration::parse_parameters(prm);
     }
   } // namespace Parameters
-} // namespace Adapter
+} // namespace Linear_Elasticity
 
 #endif
