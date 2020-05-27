@@ -758,13 +758,13 @@ namespace Linear_Elasticity
 int
 main(int argc, char **argv)
 {
+  using namespace Linear_Elasticity;
+  using namespace dealii;
+
+  Utilities::MPI::MPI_InitFinalize mpi_initialization(argc, argv, 1);
+
   try
     {
-      std::cout << "--------------------------------------------------\n"
-                << "             Running deal.ii solver \n"
-                << "--------------------------------------------------\n"
-                << std::endl;
-
       std::string parameter_file;
       if (argc > 1)
         parameter_file = argv[1];
@@ -776,7 +776,7 @@ main(int argc, char **argv)
       std::string case_path =
         std::string::npos == pos ? "" : parameter_file.substr(0, pos + 1);
 
-      Linear_Elasticity::CoupledElastoDynamics<DIM> elastic_solver(case_path);
+      CoupledElastoDynamics<DIM> elastic_solver(case_path);
       elastic_solver.run();
     }
   catch (std::exception &exc)
