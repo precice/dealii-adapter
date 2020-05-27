@@ -11,7 +11,6 @@
 
 #include <precice/SolverInterface.hpp>
 
-#include "parameter_handling.h"
 #include "time.h"
 
 namespace Adapter
@@ -25,7 +24,7 @@ namespace Adapter
      * to other solvers with preCICE i.e. data structures are set up, necessary
      * information is passed to preCICE etc.
      */
-    template <int dim, typename VectorType>
+    template <int dim, typename VectorType, typename ParameterClass>
     class CouplingFunctions
     {
     public:
@@ -35,7 +34,7 @@ namespace Adapter
        * @param[in]  parameters Parameter class, which hold the data specified
        *             in the parameters.prm file
        */
-      CouplingFunctions(const Parameters::AllParameters &parameters);
+      CouplingFunctions(const ParameterClass &parameters);
 
       /**
        * @brief      Initializes preCICE and passes all relevant data to preCICE
@@ -198,9 +197,9 @@ namespace Adapter
 
 
 
-    template <int dim, typename VectorType>
-    CouplingFunctions<dim, VectorType>::CouplingFunctions(
-      const Parameters::AllParameters &parameters)
+    template <int dim, typename VectorType, typename ParameterClass>
+    CouplingFunctions<dim, VectorType, ParameterClass>::CouplingFunctions(
+      const ParameterClass &parameters)
       : precice(parameters.participant_name,
                 parameters.config_file,
                 Utilities::MPI::this_mpi_process(MPI_COMM_WORLD),
@@ -212,9 +211,9 @@ namespace Adapter
 
 
 
-    template <int dim, typename VectorType>
+    template <int dim, typename VectorType, typename ParameterClass>
     void
-    CouplingFunctions<dim, VectorType>::initialize_precice(
+    CouplingFunctions<dim, VectorType, ParameterClass>::initialize_precice(
       const DoFHandler<dim> &dof_handler,
       const VectorType &     deal_to_precice,
       VectorType &           precice_to_deal)
@@ -348,9 +347,9 @@ namespace Adapter
 
 
 
-    template <int dim, typename VectorType>
+    template <int dim, typename VectorType, typename ParameterClass>
     void
-    CouplingFunctions<dim, VectorType>::advance_precice(
+    CouplingFunctions<dim, VectorType, ParameterClass>::advance_precice(
       const VectorType &deal_to_precice,
       VectorType &      precice_to_deal,
       const double      computed_timestep_length)
@@ -389,9 +388,9 @@ namespace Adapter
 
 
 
-    template <int dim, typename VectorType>
+    template <int dim, typename VectorType, typename ParameterClass>
     void
-    CouplingFunctions<dim, VectorType>::format_deal_to_precice(
+    CouplingFunctions<dim, VectorType, ParameterClass>::format_deal_to_precice(
       const VectorType &deal_to_precice)
     {
       // Assumption: x index is in the same position as y index in each IndexSet
@@ -421,9 +420,9 @@ namespace Adapter
 
 
 
-    template <int dim, typename VectorType>
+    template <int dim, typename VectorType, typename ParameterClass>
     void
-    CouplingFunctions<dim, VectorType>::format_precice_to_deal(
+    CouplingFunctions<dim, VectorType, ParameterClass>::format_precice_to_deal(
       VectorType &precice_to_deal) const
     {
       // This is the opposite direction as above. See comment there.
@@ -447,11 +446,12 @@ namespace Adapter
 
 
 
-    template <int dim, typename VectorType>
+    template <int dim, typename VectorType, typename ParameterClass>
     void
-    CouplingFunctions<dim, VectorType>::save_current_state_if_required(
-      const std::vector<VectorType *> &state_variables,
-      Time &                           time_class)
+    CouplingFunctions<dim, VectorType, ParameterClass>::
+      save_current_state_if_required(
+        const std::vector<VectorType *> &state_variables,
+        Time &                           time_class)
     {
       // First, we let preCICE check, whether we need to store the variables.
       // Then, the data is stored in the class
@@ -472,11 +472,11 @@ namespace Adapter
 
 
 
-    template <int dim, typename VectorType>
+    template <int dim, typename VectorType, typename ParameterClass>
     void
-    CouplingFunctions<dim, VectorType>::reload_old_state_if_required(
-      std::vector<VectorType *> &state_variables,
-      Time &                     time_class)
+    CouplingFunctions<dim, VectorType, ParameterClass>::
+      reload_old_state_if_required(std::vector<VectorType *> &state_variables,
+                                   Time &                     time_class)
     {
       // In case we need to reload a state, we just take the internally stored
       // data vectors and write then in to the input data

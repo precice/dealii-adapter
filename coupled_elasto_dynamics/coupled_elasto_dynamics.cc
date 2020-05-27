@@ -35,9 +35,9 @@
 #include <fstream>
 #include <iostream>
 
-#include "include/coupling_functions.h"
+#include "../adapter/coupling_functions.h"
+#include "../adapter/time.h"
 #include "include/parameter_handling.h"
-#include "include/time.h"
 #include "precice/SolverInterface.hpp"
 
 namespace Linear_Elasticity
@@ -138,8 +138,9 @@ namespace Linear_Elasticity
     double         gravity_value;
     int            gravity_direction;
 
-    Adapter::PreciceDealCoupling::CouplingFunctions<dim, Vector<double>>
-      coupling_functions;
+    Adapter::PreciceDealCoupling::
+      CouplingFunctions<dim, Vector<double>, Adapter::Parameters::AllParameters>
+        coupling_functions;
 
     std::vector<Vector<double> *> state_variables;
     // for the output directory
