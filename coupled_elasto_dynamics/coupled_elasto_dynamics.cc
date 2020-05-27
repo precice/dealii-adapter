@@ -23,6 +23,7 @@
 #include <deal.II/lac/full_matrix.h>
 #include <deal.II/lac/precondition.h>
 #include <deal.II/lac/solver_cg.h>
+#include <deal.II/lac/sparse_direct.h>
 #include <deal.II/lac/sparse_matrix.h>
 #include <deal.II/lac/vector.h>
 
@@ -112,6 +113,7 @@ namespace Linear_Elasticity
 
     FESystem<dim>        fe;
     MappingQGeneric<dim> mapping;
+    const unsigned int   quad_order;
 
     AffineConstraints<double> hanging_node_constraints;
 
@@ -152,6 +154,7 @@ namespace Linear_Elasticity
     , dof_handler(triangulation)
     , fe(FE_Q<dim>(parameters.poly_degree), dim)
     , mapping(MappingQGeneric<dim>(parameters.poly_degree))
+    , quad_order(parameters.poly_degree + 1)
     , coupling_functions(parameters)
     , case_path(case_path)
   {}
@@ -308,7 +311,7 @@ namespace Linear_Elasticity
 
     MatrixCreator::create_mass_matrix(mapping,
                                       dof_handler,
-                                      QGauss<dim>(parameters.quad_order),
+                                      QGauss<dim>(quad_order),
                                       mass_matrix);
     mass_matrix *= parameters.rho;
 
@@ -343,7 +346,7 @@ namespace Linear_Elasticity
   void
   CoupledElastoDynamics<dim>::assemble_system()
   {
-    QGauss<dim> quadrature_formula(parameters.quad_order);
+    QGauss<dim> quadrature_formula(quad_order);
 
     FEValues<dim> fe_values(mapping,
                             fe,
@@ -452,7 +455,7 @@ namespace Linear_Elasticity
         // create the contribution to the right-hand side vector
         VectorTools::create_right_hand_side(mapping,
                                             dof_handler,
-                                            QGauss<dim>(parameters.quad_order),
+                                            QGauss<dim>(quad_order),
                                             gravity_function,
                                             gravitational_force);
       }
@@ -467,7 +470,7 @@ namespace Linear_Elasticity
     system_rhs = 0.0;
 
     // quadrature formula for integration over faces (dim-1)
-    QGauss<dim - 1> face_quadrature_formula(parameters.quad_order);
+    QGauss<dim - 1> face_quadrature_formula(quad_order);
 
     FEFaceValues<dim> fe_face_values(mapping,
                                      fe,
@@ -593,20 +596,44 @@ namespace Linear_Elasticity
   void
   CoupledElastoDynamics<dim>::solve()
   {
-    std::cout << "\t CG solver: " << std::endl;
-    SolverControl solver_control(1000, 1e-12);
-    SolverCG<>    cg(solver_control);
+    const std::string solver_type = "Direct";
 
-    PreconditionSSOR<> preconditioner;
-    preconditioner.initialize(system_matrix, 1.2);
+    uint   lin_it;
+    double lin_res;
 
-    cg.solve(system_matrix, velocity, system_rhs, preconditioner);
+    if (solver_type == "CG")
+      {
+        std::cout << "\t CG solver: " << std::endl;
+        SolverControl solver_control(1000, 1e-12);
+        SolverCG<>    cg(solver_control);
+
+        PreconditionSSOR<> preconditioner;
+        preconditioner.initialize(system_matrix, 1.2);
+
+        cg.solve(system_matrix, velocity, system_rhs, preconditioner);
+
+        lin_it  = solver_control.last_step();
+        lin_res = solver_control.last_value();
+      }
+    else if (solver_type == "Direct")
+      {
+        std::cout << "\t Direct solver: " << std::endl;
+
+        SparseDirectUMFPACK A_direct;
+        A_direct.initialize(system_matrix);
+        A_direct.vmult(velocity, system_rhs);
+
+        lin_it  = 1;
+        lin_res = 0.0;
+      }
+    else
+      Assert(solver_type == "Direct" || solver_type == "CG",
+             ExcNotImplemented());
 
     // assert divergence
     Assert(velocity.linfty_norm() < 1e4, ExcMessage("Linear system diverged"));
-    std::cout << "\t     No of iterations:\t" << solver_control.last_step()
-              << "\n \t     Final residual:\t" << solver_control.last_value()
-              << std::endl;
+    std::cout << "\t     No of iterations:\t" << lin_it
+              << "\n \t     Final residual:\t" << lin_res << std::endl;
     hanging_node_constraints.distribute(velocity);
   }
 

@@ -109,7 +109,6 @@ namespace Adapter
     struct FESystem
     {
       unsigned int poly_degree;
-      unsigned int quad_order;
 
       static void
       declare_parameters(ParameterHandler &prm);
@@ -128,11 +127,6 @@ namespace Adapter
                           "1",
                           Patterns::Integer(0),
                           "Polynomial degree of the FE system");
-
-        prm.declare_entry("Quadrature order",
-                          "3",
-                          Patterns::Integer(0),
-                          "Gauss quadrature order");
       }
       prm.leave_subsection();
     }
@@ -143,7 +137,6 @@ namespace Adapter
       prm.enter_subsection("Finite element system");
       {
         poly_degree = prm.get_integer("Polynomial degree");
-        quad_order  = prm.get_integer("Quadrature order");
       }
       prm.leave_subsection();
     }
