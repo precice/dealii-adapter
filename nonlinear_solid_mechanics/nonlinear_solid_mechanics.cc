@@ -47,11 +47,11 @@
 #include <fstream>
 #include <iostream>
 
+#include "../adapter/coupling_functions.h"
+#include "../adapter/time.h"
 #include "include/compressible_neo_hook_material.h"
-#include "include/coupling_functions.h"
 #include "include/parameter_handling.h"
 #include "include/postprocessor.h"
-#include "include/time.h"
 #include "precice/SolverInterface.hpp"
 
 namespace Neo_Hook_Solid
@@ -73,7 +73,7 @@ namespace Neo_Hook_Solid
     {}
 
     void
-    setup_lqp(const Adapter::Parameters::AllParameters &parameters)
+    setup_lqp(const Parameters::AllParameters &parameters)
     {
       material.reset(
         new Material_Compressible_Neo_Hook_One_Field<dim, NumberType>(
@@ -195,7 +195,7 @@ namespace Neo_Hook_Solid
     void
     output_results() const;
 
-    const Adapter::Parameters::AllParameters parameters;
+    const Parameters::AllParameters parameters;
 
     double vol_reference;
     double vol_current;
@@ -277,8 +277,9 @@ namespace Neo_Hook_Solid
     BlockVector<double> external_stress;
 
     // Adapter object, which does all work in terms of coupling with preCICE
-    Adapter::PreciceDealCoupling::CouplingFunctions<dim, BlockVector<double>>
-      coupling_functions;
+    Adapter::
+      CouplingFunctions<dim, BlockVector<double>, Parameters::AllParameters>
+        coupling_functions;
 
     // Then define a number of variables to store norms and update norms and
     // normalisation factors.
@@ -327,8 +328,7 @@ namespace Neo_Hook_Solid
   // Constructor initializes member variables and reads the parameter file
   template <int dim, typename NumberType>
   Solid<dim, NumberType>::Solid(const std::string &case_path)
-    : parameters(
-        Adapter::Parameters::AllParameters(case_path + "parameters.prm"))
+    : parameters(Parameters::AllParameters(case_path + "parameters.prm"))
     , vol_reference(0.0)
     , vol_current(0.0)
     , triangulation(Triangulation<dim>::maximum_smoothing)

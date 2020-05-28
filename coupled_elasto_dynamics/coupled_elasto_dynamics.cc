@@ -138,9 +138,8 @@ namespace Linear_Elasticity
     double         gravity_value;
     int            gravity_direction;
 
-    Adapter::PreciceDealCoupling::
-      CouplingFunctions<dim, Vector<double>, Parameters::AllParameters>
-        coupling_functions;
+    Adapter::CouplingFunctions<dim, Vector<double>, Parameters::AllParameters>
+      coupling_functions;
 
     std::vector<Vector<double> *> state_variables;
     // for the output directory

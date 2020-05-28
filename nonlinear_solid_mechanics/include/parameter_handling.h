@@ -3,7 +3,7 @@
 
 #include <deal.II/base/parameter_handler.h>
 
-namespace Adapter
+namespace Neo_Hook_Solid
 {
   using namespace dealii;
 
@@ -403,6 +403,6 @@ namespace Adapter
       PreciceAdapterConfiguration::parse_parameters(prm);
     }
   } // namespace Parameters
-} // namespace Adapter
+} // namespace Neo_Hook_Solid
 
 #endif
