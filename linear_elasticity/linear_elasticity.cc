@@ -77,11 +77,11 @@ namespace Linear_Elasticity
 
 
   template <int dim>
-  class CoupledElastoDynamics
+  class ElastoDynamics
   {
   public:
-    CoupledElastoDynamics(const std::string &case_path);
-    ~CoupledElastoDynamics();
+    ElastoDynamics(const std::string &case_path);
+    ~ElastoDynamics();
     void
     run();
 
@@ -149,8 +149,7 @@ namespace Linear_Elasticity
 
   // constructor
   template <int dim>
-  CoupledElastoDynamics<dim>::CoupledElastoDynamics(
-    const std::string &case_path)
+  ElastoDynamics<dim>::ElastoDynamics(const std::string &case_path)
     : parameters(case_path + "parameters.prm")
     , interface_boundary_id(6)
     , time(parameters.end_time, parameters.delta_t)
@@ -165,14 +164,14 @@ namespace Linear_Elasticity
 
   // destructor
   template <int dim>
-  CoupledElastoDynamics<dim>::~CoupledElastoDynamics()
+  ElastoDynamics<dim>::~ElastoDynamics()
   {
     dof_handler.clear();
   }
 
   template <int dim>
   void
-  CoupledElastoDynamics<dim>::make_grid()
+  ElastoDynamics<dim>::make_grid()
   {
     std::cout << "  Create mesh: " << std::endl;
 
@@ -288,7 +287,7 @@ namespace Linear_Elasticity
 
   template <int dim>
   void
-  CoupledElastoDynamics<dim>::setup_system()
+  ElastoDynamics<dim>::setup_system()
   {
     std::cout << "  Setup system: " << std::endl;
 
@@ -348,7 +347,7 @@ namespace Linear_Elasticity
 
   template <int dim>
   void
-  CoupledElastoDynamics<dim>::assemble_system()
+  ElastoDynamics<dim>::assemble_system()
   {
     QGauss<dim> quadrature_formula(quad_order);
 
@@ -468,7 +467,7 @@ namespace Linear_Elasticity
 
   template <int dim>
   void
-  CoupledElastoDynamics<dim>::assemble_rhs()
+  ElastoDynamics<dim>::assemble_rhs()
   {
     std::cout << "\t Assemble rhs " << std::endl;
     system_rhs = 0.0;
@@ -602,7 +601,7 @@ namespace Linear_Elasticity
 
   template <int dim>
   void
-  CoupledElastoDynamics<dim>::solve()
+  ElastoDynamics<dim>::solve()
   {
     timer.enter_subsection("Solve system");
 
@@ -651,7 +650,7 @@ namespace Linear_Elasticity
 
   template <int dim>
   void
-  CoupledElastoDynamics<dim>::update_displacement()
+  ElastoDynamics<dim>::update_displacement()
   {
     // D_n+1= D_n + delta_t*theta* V_n+1 + delta_t*(1-theta)* V_n
     displacement.add(time.get_delta_t() * parameters.theta, velocity);
@@ -661,7 +660,7 @@ namespace Linear_Elasticity
 
   template <int dim>
   void
-  CoupledElastoDynamics<dim>::output_results() const
+  ElastoDynamics<dim>::output_results() const
   {
     timer.enter_subsection("Output results");
     // compute the strains save it in the outputfiles
@@ -714,7 +713,7 @@ namespace Linear_Elasticity
 
   template <int dim>
   void
-  CoupledElastoDynamics<dim>::run()
+  ElastoDynamics<dim>::run()
   {
     make_grid();
     setup_system();
@@ -773,7 +772,7 @@ main(int argc, char **argv)
       std::string case_path =
         std::string::npos == pos ? "" : parameter_file.substr(0, pos + 1);
 
-      CoupledElastoDynamics<DIM> elastic_solver(case_path);
+      ElastoDynamics<DIM> elastic_solver(case_path);
       elastic_solver.run();
     }
   catch (std::exception &exc)

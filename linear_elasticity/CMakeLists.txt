@@ -3,7 +3,7 @@
 ##
 
 # Set the name of the project and target:
-SET(TARGET "coupled_elasto_dynamics")
+SET(TARGET "linear_elasticity")
 
 IF (NOT DEFINED DIM)
 	SET(DIM 2)
