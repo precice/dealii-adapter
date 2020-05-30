@@ -52,9 +52,9 @@ namespace Adapter
      *             participants.
      */
     void
-    initialize_precice(const DoFHandler<dim> &dof_handler,
-                       const VectorType &     deal_to_precice,
-                       VectorType &           precice_to_deal);
+    initialize(const DoFHandler<dim> &dof_handler,
+               const VectorType &     deal_to_precice,
+               VectorType &           precice_to_deal);
 
     /**
      * @brief      Advances preCICE after every timestep, converts data formats
@@ -70,9 +70,9 @@ namespace Adapter
      *             the solver.
      */
     void
-    advance_precice(const VectorType &deal_to_precice,
-                    VectorType &      precice_to_deal,
-                    const double      computed_timestep_length);
+    advance(const VectorType &deal_to_precice,
+            VectorType &      precice_to_deal,
+            const double      computed_timestep_length);
 
     /**
      * @brief      Saves current state of time dependent variables in case of an
@@ -211,7 +211,7 @@ namespace Adapter
 
   template <int dim, typename VectorType, typename ParameterClass>
   void
-  Adapter<dim, VectorType, ParameterClass>::initialize_precice(
+  Adapter<dim, VectorType, ParameterClass>::initialize(
     const DoFHandler<dim> &dof_handler,
     const VectorType &     deal_to_precice,
     VectorType &           precice_to_deal)
@@ -345,7 +345,7 @@ namespace Adapter
 
   template <int dim, typename VectorType, typename ParameterClass>
   void
-  Adapter<dim, VectorType, ParameterClass>::advance_precice(
+  Adapter<dim, VectorType, ParameterClass>::advance(
     const VectorType &deal_to_precice,
     VectorType &      precice_to_deal,
     const double      computed_timestep_length)

@@ -267,13 +267,13 @@ namespace Neo_Hook_Solid
     BlockVector<double>       acceleration_old;
 
     // Alias to collect all time dependent variables in a single vector
-    // This is directly passed to the CouplingFunctions routine in order to
+    // This is directly passed to the Adapter routine in order to
     // store these variables for implicit couplings.
     std::vector<BlockVector<double> *> state_variables;
 
     // Global vector, which keeps all contributions of the Fluid participant
     // i.e. stress data for assembly. This vector is filled properly in the
-    // CouplingFunctions
+    // Adapter
     BlockVector<double> external_stress;
 
     // Adapter object, which does all work in terms of coupling with preCICE
@@ -369,9 +369,7 @@ namespace Neo_Hook_Solid
 
     // Initialize preCICE before starting the time loop
     // Here, all information concerning the coupling is passed to preCICE
-    adapter.initialize_precice(dof_handler_ref,
-                               total_displacement,
-                               external_stress);
+    adapter.initialize(dof_handler_ref, total_displacement, external_stress);
 
 
     BlockVector<NumberType> solution_delta(dofs_per_block);
@@ -396,9 +394,9 @@ namespace Neo_Hook_Solid
 
         // ... and pass the coupling data to preCICE, in this case displacement
         // (write data) and stress (read data)
-        adapter.advance_precice(total_displacement,
-                                external_stress,
-                                time.get_delta_t());
+        adapter.advance(total_displacement,
+                        external_stress,
+                        time.get_delta_t());
         time.increment();
 
         // Restore the old state, if our implicit time step is not yet converged
@@ -483,7 +481,7 @@ namespace Neo_Hook_Solid
 
     // Cell iterator for boundary conditions
 
-    // The boundary ID for Neumann BCs is stored in the CouplingFunctions to
+    // The boundary ID for Neumann BCs is stored in the Adapter to
     // avoid errors. Hence, we need to call it from there.
     // Note, the selected IDs are arbitrarily chosen. They just need to be
     // unique

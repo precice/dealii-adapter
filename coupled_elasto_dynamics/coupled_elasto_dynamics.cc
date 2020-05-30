@@ -719,7 +719,7 @@ namespace Linear_Elasticity
     time.increment();
 
     assemble_system();
-    adapter.initialize_precice(dof_handler, displacement, forces);
+    adapter.initialize(dof_handler, displacement, forces);
 
     while (adapter.precice.isCouplingOngoing())
       {
@@ -735,7 +735,7 @@ namespace Linear_Elasticity
 
         update_displacement();
 
-        adapter.advance_precice(displacement, forces, time.get_delta_t());
+        adapter.advance(displacement, forces, time.get_delta_t());
 
         time.increment();
 
