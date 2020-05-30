@@ -3,7 +3,7 @@
 
 #include <deal.II/base/parameter_handler.h>
 
-namespace Neo_Hook_Solid
+namespace Nonlinear_Elasticity
 {
   using namespace dealii;
 
@@ -403,6 +403,6 @@ namespace Neo_Hook_Solid
       PreciceAdapterConfiguration::parse_parameters(prm);
     }
   } // namespace Parameters
-} // namespace Neo_Hook_Solid
+} // namespace Nonlinear_Elasticity
 
 #endif

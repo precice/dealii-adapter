@@ -3,7 +3,7 @@
 ##
 
 # Set the name of the project and target:
-SET(TARGET "nonlinear_solid_mechanics")
+SET(TARGET "nonlinear_elasticity")
 
 SET(TARGET_SRC
   ${TARGET}.cc

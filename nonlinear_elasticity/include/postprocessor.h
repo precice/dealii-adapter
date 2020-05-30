@@ -5,7 +5,7 @@
 
 // Calculate Strains and pass displacement to the dof_handler
 // TODO: Strains are symmetric. Currently all tensor components are processed
-namespace Neo_Hook_Solid
+namespace Nonlinear_Elasticity
 {
   using namespace dealii;
   /**
@@ -121,5 +121,5 @@ namespace Neo_Hook_Solid
     return update_values | update_gradients;
   }
 
-} // namespace Neo_Hook_Solid
+} // namespace Nonlinear_Elasticity
 #endif // POSTPROCESSOR_H

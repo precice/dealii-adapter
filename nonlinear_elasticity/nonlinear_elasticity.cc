@@ -54,7 +54,7 @@
 #include "include/postprocessor.h"
 #include "precice/SolverInterface.hpp"
 
-namespace Neo_Hook_Solid
+namespace Nonlinear_Elasticity
 {
   using namespace dealii;
 
@@ -1461,12 +1461,12 @@ namespace Neo_Hook_Solid
     data_out.write_vtk(output);
   }
 
-} // namespace Neo_Hook_Solid
+} // namespace Nonlinear_Elasticity
 
 int
 main(int argc, char **argv)
 {
-  using namespace Neo_Hook_Solid;
+  using namespace Nonlinear_Elasticity;
   using namespace dealii;
 
   Utilities::MPI::MPI_InitFinalize mpi_initialization(argc, argv, 1);
