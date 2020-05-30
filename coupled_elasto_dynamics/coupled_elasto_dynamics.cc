@@ -108,6 +108,7 @@ namespace Linear_Elasticity
     Triangulation<dim> triangulation;
     unsigned int       clamped_mesh_id;
     unsigned int       out_of_plane_clamped_mesh_id;
+    const unsigned int interface_boundary_id;
 
     Adapter::Time       time;
     mutable TimerOutput timer;
@@ -151,13 +152,14 @@ namespace Linear_Elasticity
   CoupledElastoDynamics<dim>::CoupledElastoDynamics(
     const std::string &case_path)
     : parameters(case_path + "parameters.prm")
+    , interface_boundary_id(6)
     , time(parameters.end_time, parameters.delta_t)
     , timer(std::cout, TimerOutput::summary, TimerOutput::wall_times)
     , dof_handler(triangulation)
     , fe(FE_Q<dim>(parameters.poly_degree), dim)
     , mapping(MappingQGeneric<dim>(parameters.poly_degree))
     , quad_order(parameters.poly_degree + 1)
-    , adapter(parameters)
+    , adapter(parameters, interface_boundary_id)
     , case_path(case_path)
   {}
 
@@ -253,16 +255,17 @@ namespace Linear_Elasticity
 
     // set the desired IDs for clamped boundaries and out_of_plane clamped
     // boundaries interface ID is set in the parameter file
-    clamped_mesh_id               = 0;
-    out_of_plane_clamped_mesh_id  = 4;
-    const unsigned int neumann_id = adapter.deal_boundary_interface_id;
+    clamped_mesh_id              = 0;
+    out_of_plane_clamped_mesh_id = 4;
+
     // the IDs must not be the same:
     std::string error_message(
       "The interface_id cannot be the same as the clamped one");
-    Assert(clamped_mesh_id != neumann_id, ExcMessage(error_message));
-    Assert(out_of_plane_clamped_mesh_id != neumann_id,
+    Assert(clamped_mesh_id != interface_boundary_id, ExcMessage(error_message));
+    Assert(out_of_plane_clamped_mesh_id != interface_boundary_id,
            ExcMessage(error_message));
-
+    Assert(interface_boundary_id == adapter.deal_boundary_interface_id,
+           ExcMessage("Wrong interface ID in the Adapter specified"));
 
     for (const auto &cell : triangulation.active_cell_iterators())
       for (const auto &face : cell->face_iterators())
@@ -272,7 +275,7 @@ namespace Linear_Elasticity
             if (face->boundary_id() == id_flap_short_top ||
                 face->boundary_id() == id_flap_long_bottom ||
                 face->boundary_id() == id_flap_long_top)
-              face->set_boundary_id(neumann_id);
+              face->set_boundary_id(interface_boundary_id);
             // boundaries clamped in all directions
             else if (face->boundary_id() == id_flap_short_bottom)
               face->set_boundary_id(clamped_mesh_id);
@@ -500,7 +503,7 @@ namespace Linear_Elasticity
         // by applying contributions from the coupling interface
         for (const auto &face : cell->face_iterators())
           if (face->at_boundary() == true &&
-              face->boundary_id() == adapter.deal_boundary_interface_id)
+              face->boundary_id() == interface_boundary_id)
             {
               fe_face_values.reinit(cell, face);
               // Extract from global stress vector

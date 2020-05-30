@@ -233,6 +233,9 @@ namespace Neo_Hook_Solid
     const QGauss<dim - 1> qf_face;
     const unsigned int    n_q_points;
     const unsigned int    n_q_points_f;
+    // Interface ID, which is later assigned to the mesh region for coupling
+    // It is chosen arbotrarily
+    const unsigned int boundary_interface_id;
 
     // Newmark parameters
     // Coefficients, which are needed for time dependencies
@@ -282,7 +285,6 @@ namespace Neo_Hook_Solid
 
     // Then define a number of variables to store norms and update norms and
     // normalisation factors.
-
     struct Errors
     {
       Errors()
@@ -344,8 +346,9 @@ namespace Neo_Hook_Solid
     , qf_face(parameters.poly_degree + 2)
     , n_q_points(qf_cell.size())
     , n_q_points_f(qf_face.size())
+    , boundary_interface_id(7)
     , case_path(case_path)
-    , adapter(parameters)
+    , adapter(parameters, boundary_interface_id)
   {}
 
   // Destructor clears the DoFHandler
@@ -481,11 +484,11 @@ namespace Neo_Hook_Solid
 
     // Cell iterator for boundary conditions
 
-    // The boundary ID for Neumann BCs is stored in the Adapter to
-    // avoid errors. Hence, we need to call it from there.
+    // The boundary ID for Neumann BCs is stored globally to
+    // avoid errors.
     // Note, the selected IDs are arbitrarily chosen. They just need to be
     // unique
-    const unsigned int neumann_boundary_id = adapter.deal_boundary_interface_id;
+    const unsigned int neumann_boundary_id = boundary_interface_id;
     // ...and for clamped boundaries. The ID needs to be consistent with the one
     // set in make_constarints. We decided to set one globally, which is reused
     // in make_constraints
@@ -516,6 +519,8 @@ namespace Neo_Hook_Solid
       clamped_id != neumann_boundary_id,
       ExcMessage(
         "Boundary IDs must not be the same, for different boundary types."));
+    Assert(boundary_interface_id == adapter.deal_boundary_interface_id,
+           ExcMessage("Wrong interface ID in the Adapter."));
 
     vol_reference = GridTools::volume(triangulation);
     vol_current   = vol_reference;
@@ -1019,8 +1024,7 @@ namespace Neo_Hook_Solid
       const FESystem<dim> &fe                = data.solid->fe;
       const unsigned int & u_dof             = data.solid->u_dof;
       const FEValuesExtractors::Vector &u_fe = data.solid->u_fe;
-      const unsigned int &              interf_id =
-        data.solid->adapter.deal_boundary_interface_id;
+      const unsigned int &interf_id = data.solid->boundary_interface_id;
 
       for (const auto &face : cell->face_iterators())
         if (face->at_boundary() == true && face->boundary_id() == interf_id)

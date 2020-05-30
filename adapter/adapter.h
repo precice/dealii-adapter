@@ -31,8 +31,11 @@ namespace Adapter
      *
      * @param[in]  parameters Parameter class, which hold the data specified
      *             in the parameters.prm file
+     * @param[in]  deal_boundary_interface_id Boundary ID of the triangulation,
+     *             which is associated with the coupling interface.
      */
-    Adapter(const ParameterClass &parameters);
+    Adapter(const ParameterClass &parameters,
+            const unsigned int    deal_boundary_interface_id);
 
     /**
      * @brief      Initializes preCICE and passes all relevant data to preCICE
@@ -121,12 +124,10 @@ namespace Adapter
 
     // Boundary ID of the deal.II mesh, associated with the coupling
     // interface. The variable is public and should be used during grid
-    // generation, but is also involved during system assembly.
-    // It has been chosen arbitrarily to be 6, but it could be any other
-    // number as well. The only thing, one needs to make sure is, that this ID
-    // is not given to another part of the boundary e.g. clamped one, but this
-    // is asserted in the make_grid function
-    static constexpr unsigned int deal_boundary_interface_id = 6;
+    // generation, but is also involved during system assembly. The only thing,
+    // one needs to make sure is, that this ID is not given to another part of
+    // the boundary e.g. clamped one.
+    const unsigned int deal_boundary_interface_id;
 
   private:
     // preCICE related initializations
@@ -197,11 +198,13 @@ namespace Adapter
 
   template <int dim, typename VectorType, typename ParameterClass>
   Adapter<dim, VectorType, ParameterClass>::Adapter(
-    const ParameterClass &parameters)
+    const ParameterClass &parameters,
+    const unsigned int    deal_boundary_interface_id)
     : precice(parameters.participant_name,
               parameters.config_file,
               Utilities::MPI::this_mpi_process(MPI_COMM_WORLD),
               Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD))
+    , deal_boundary_interface_id(deal_boundary_interface_id)
     , mesh_name(parameters.mesh_name)
     , read_data_name(parameters.read_data_name)
     , write_data_name(parameters.write_data_name)
