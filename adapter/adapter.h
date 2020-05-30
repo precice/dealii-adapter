@@ -1,5 +1,5 @@
-#ifndef COUPLING_FUNCTIONS_H
-#define COUPLING_FUNCTIONS_H
+#ifndef ADAPTER_H
+#define ADAPTER_H
 
 #include <deal.II/base/exceptions.h>
 
@@ -18,12 +18,12 @@ namespace Adapter
   using namespace dealii;
 
   /**
-   * The CouplingFunctions class keeps all functionalities to couple deal.II
-   * to other solvers with preCICE i.e. data structures are set up, necessary
-   * information is passed to preCICE etc.
+   * The Adapter class keeps all functionalities to couple deal.II to other
+   * solvers with preCICE i.e. data structures are set up, necessary information
+   * is passed to preCICE etc.
    */
   template <int dim, typename VectorType, typename ParameterClass>
-  class CouplingFunctions
+  class Adapter
   {
   public:
     /**
@@ -32,7 +32,7 @@ namespace Adapter
      * @param[in]  parameters Parameter class, which hold the data specified
      *             in the parameters.prm file
      */
-    CouplingFunctions(const ParameterClass &parameters);
+    Adapter(const ParameterClass &parameters);
 
     /**
      * @brief      Initializes preCICE and passes all relevant data to preCICE
@@ -196,7 +196,7 @@ namespace Adapter
 
 
   template <int dim, typename VectorType, typename ParameterClass>
-  CouplingFunctions<dim, VectorType, ParameterClass>::CouplingFunctions(
+  Adapter<dim, VectorType, ParameterClass>::Adapter(
     const ParameterClass &parameters)
     : precice(parameters.participant_name,
               parameters.config_file,
@@ -211,7 +211,7 @@ namespace Adapter
 
   template <int dim, typename VectorType, typename ParameterClass>
   void
-  CouplingFunctions<dim, VectorType, ParameterClass>::initialize_precice(
+  Adapter<dim, VectorType, ParameterClass>::initialize_precice(
     const DoFHandler<dim> &dof_handler,
     const VectorType &     deal_to_precice,
     VectorType &           precice_to_deal)
@@ -345,7 +345,7 @@ namespace Adapter
 
   template <int dim, typename VectorType, typename ParameterClass>
   void
-  CouplingFunctions<dim, VectorType, ParameterClass>::advance_precice(
+  Adapter<dim, VectorType, ParameterClass>::advance_precice(
     const VectorType &deal_to_precice,
     VectorType &      precice_to_deal,
     const double      computed_timestep_length)
@@ -386,7 +386,7 @@ namespace Adapter
 
   template <int dim, typename VectorType, typename ParameterClass>
   void
-  CouplingFunctions<dim, VectorType, ParameterClass>::format_deal_to_precice(
+  Adapter<dim, VectorType, ParameterClass>::format_deal_to_precice(
     const VectorType &deal_to_precice)
   {
     // Assumption: x index is in the same position as y index in each IndexSet
@@ -418,7 +418,7 @@ namespace Adapter
 
   template <int dim, typename VectorType, typename ParameterClass>
   void
-  CouplingFunctions<dim, VectorType, ParameterClass>::format_precice_to_deal(
+  Adapter<dim, VectorType, ParameterClass>::format_precice_to_deal(
     VectorType &precice_to_deal) const
   {
     // This is the opposite direction as above. See comment there.
@@ -444,10 +444,9 @@ namespace Adapter
 
   template <int dim, typename VectorType, typename ParameterClass>
   void
-  CouplingFunctions<dim, VectorType, ParameterClass>::
-    save_current_state_if_required(
-      const std::vector<VectorType *> &state_variables,
-      Time &                           time_class)
+  Adapter<dim, VectorType, ParameterClass>::save_current_state_if_required(
+    const std::vector<VectorType *> &state_variables,
+    Time &                           time_class)
   {
     // First, we let preCICE check, whether we need to store the variables.
     // Then, the data is stored in the class
@@ -470,9 +469,9 @@ namespace Adapter
 
   template <int dim, typename VectorType, typename ParameterClass>
   void
-  CouplingFunctions<dim, VectorType, ParameterClass>::
-    reload_old_state_if_required(std::vector<VectorType *> &state_variables,
-                                 Time &                     time_class)
+  Adapter<dim, VectorType, ParameterClass>::reload_old_state_if_required(
+    std::vector<VectorType *> &state_variables,
+    Time &                     time_class)
   {
     // In case we need to reload a state, we just take the internally stored
     // data vectors and write then in to the input data
@@ -496,4 +495,4 @@ namespace Adapter
   }
 } // namespace Adapter
 
-#endif // COUPLING_FUNCTIONS_H
+#endif // ADAPTER_H

@@ -47,7 +47,7 @@
 #include <fstream>
 #include <iostream>
 
-#include "../adapter/coupling_functions.h"
+#include "../adapter/adapter.h"
 #include "../adapter/time.h"
 #include "include/compressible_neo_hook_material.h"
 #include "include/parameter_handling.h"
@@ -277,9 +277,8 @@ namespace Neo_Hook_Solid
     BlockVector<double> external_stress;
 
     // Adapter object, which does all work in terms of coupling with preCICE
-    Adapter::
-      CouplingFunctions<dim, BlockVector<double>, Parameters::AllParameters>
-        coupling_functions;
+    Adapter::Adapter<dim, BlockVector<double>, Parameters::AllParameters>
+      adapter;
 
     // Then define a number of variables to store norms and update norms and
     // normalisation factors.
@@ -346,7 +345,7 @@ namespace Neo_Hook_Solid
     , n_q_points(qf_cell.size())
     , n_q_points_f(qf_face.size())
     , case_path(case_path)
-    , coupling_functions(parameters)
+    , adapter(parameters)
   {}
 
   // Destructor clears the DoFHandler
@@ -370,22 +369,21 @@ namespace Neo_Hook_Solid
 
     // Initialize preCICE before starting the time loop
     // Here, all information concerning the coupling is passed to preCICE
-    coupling_functions.initialize_precice(dof_handler_ref,
-                                          total_displacement,
-                                          external_stress);
+    adapter.initialize_precice(dof_handler_ref,
+                               total_displacement,
+                               external_stress);
 
 
     BlockVector<NumberType> solution_delta(dofs_per_block);
 
     // Start the time loop. Steering is done by preCICE itself
-    while (coupling_functions.precice.isCouplingOngoing())
+    while (adapter.precice.isCouplingOngoing())
       {
         solution_delta = 0.0;
 
         // If we have an implicit coupling, we need to save data before
         // advancing in time in order to restore it later
-        coupling_functions.save_current_state_if_required(state_variables,
-                                                          time);
+        adapter.save_current_state_if_required(state_variables, time);
 
         // Solve a the system using the Newton-Raphson algorithm
         solve_nonlinear_timestep(solution_delta);
@@ -398,22 +396,22 @@ namespace Neo_Hook_Solid
 
         // ... and pass the coupling data to preCICE, in this case displacement
         // (write data) and stress (read data)
-        coupling_functions.advance_precice(total_displacement,
-                                           external_stress,
-                                           time.get_delta_t());
+        adapter.advance_precice(total_displacement,
+                                external_stress,
+                                time.get_delta_t());
         time.increment();
 
         // Restore the old state, if our implicit time step is not yet converged
-        coupling_functions.reload_old_state_if_required(state_variables, time);
+        adapter.reload_old_state_if_required(state_variables, time);
 
         // ...and output results, if the coupling time step has converged
-        if (coupling_functions.precice.isTimeWindowComplete() &&
+        if (adapter.precice.isTimeWindowComplete() &&
             time.get_timestep() % parameters.output_interval == 0)
           output_results();
       }
 
     // finalizes preCICE and finishes the simulation
-    coupling_functions.precice.finalize();
+    adapter.precice.finalize();
   }
 
 
@@ -489,8 +487,7 @@ namespace Neo_Hook_Solid
     // avoid errors. Hence, we need to call it from there.
     // Note, the selected IDs are arbitrarily chosen. They just need to be
     // unique
-    const unsigned int neumann_boundary_id =
-      coupling_functions.deal_boundary_interface_id;
+    const unsigned int neumann_boundary_id = adapter.deal_boundary_interface_id;
     // ...and for clamped boundaries. The ID needs to be consistent with the one
     // set in make_constarints. We decided to set one globally, which is reused
     // in make_constraints
@@ -1025,7 +1022,7 @@ namespace Neo_Hook_Solid
       const unsigned int & u_dof             = data.solid->u_dof;
       const FEValuesExtractors::Vector &u_fe = data.solid->u_fe;
       const unsigned int &              interf_id =
-        data.solid->coupling_functions.deal_boundary_interface_id;
+        data.solid->adapter.deal_boundary_interface_id;
 
       for (const auto &face : cell->face_iterators())
         if (face->at_boundary() == true && face->boundary_id() == interf_id)

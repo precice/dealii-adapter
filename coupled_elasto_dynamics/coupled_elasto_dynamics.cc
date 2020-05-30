@@ -35,7 +35,7 @@
 #include <fstream>
 #include <iostream>
 
-#include "../adapter/coupling_functions.h"
+#include "../adapter/adapter.h"
 #include "../adapter/time.h"
 #include "include/parameter_handling.h"
 #include "precice/SolverInterface.hpp"
@@ -138,8 +138,7 @@ namespace Linear_Elasticity
     double         gravity_value;
     int            gravity_direction;
 
-    Adapter::CouplingFunctions<dim, Vector<double>, Parameters::AllParameters>
-      coupling_functions;
+    Adapter::Adapter<dim, Vector<double>, Parameters::AllParameters> adapter;
 
     std::vector<Vector<double> *> state_variables;
     // for the output directory
@@ -158,7 +157,7 @@ namespace Linear_Elasticity
     , fe(FE_Q<dim>(parameters.poly_degree), dim)
     , mapping(MappingQGeneric<dim>(parameters.poly_degree))
     , quad_order(parameters.poly_degree + 1)
-    , coupling_functions(parameters)
+    , adapter(parameters)
     , case_path(case_path)
   {}
 
@@ -254,10 +253,9 @@ namespace Linear_Elasticity
 
     // set the desired IDs for clamped boundaries and out_of_plane clamped
     // boundaries interface ID is set in the parameter file
-    clamped_mesh_id              = 0;
-    out_of_plane_clamped_mesh_id = 4;
-    const unsigned int neumann_id =
-      coupling_functions.deal_boundary_interface_id;
+    clamped_mesh_id               = 0;
+    out_of_plane_clamped_mesh_id  = 4;
+    const unsigned int neumann_id = adapter.deal_boundary_interface_id;
     // the IDs must not be the same:
     std::string error_message(
       "The interface_id cannot be the same as the clamped one");
@@ -502,8 +500,7 @@ namespace Linear_Elasticity
         // by applying contributions from the coupling interface
         for (const auto &face : cell->face_iterators())
           if (face->at_boundary() == true &&
-              face->boundary_id() ==
-                coupling_functions.deal_boundary_interface_id)
+              face->boundary_id() == adapter.deal_boundary_interface_id)
             {
               fe_face_values.reinit(cell, face);
               // Extract from global stress vector
@@ -722,16 +719,15 @@ namespace Linear_Elasticity
     time.increment();
 
     assemble_system();
-    coupling_functions.initialize_precice(dof_handler, displacement, forces);
+    adapter.initialize_precice(dof_handler, displacement, forces);
 
-    while (coupling_functions.precice.isCouplingOngoing())
+    while (adapter.precice.isCouplingOngoing())
       {
         std::cout << std::endl
                   << "Timestep " << time.get_timestep() << " @ "
                   << time.current() << "s" << std::endl;
 
-        coupling_functions.save_current_state_if_required(state_variables,
-                                                          time);
+        adapter.save_current_state_if_required(state_variables, time);
 
         assemble_rhs();
 
@@ -739,19 +735,17 @@ namespace Linear_Elasticity
 
         update_displacement();
 
-        coupling_functions.advance_precice(displacement,
-                                           forces,
-                                           time.get_delta_t());
+        adapter.advance_precice(displacement, forces, time.get_delta_t());
 
         time.increment();
 
-        coupling_functions.reload_old_state_if_required(state_variables, time);
+        adapter.reload_old_state_if_required(state_variables, time);
 
-        if (coupling_functions.precice.isTimeWindowComplete() &&
+        if (adapter.precice.isTimeWindowComplete() &&
             time.get_timestep() % parameters.output_interval == 0)
           output_results();
       }
-    coupling_functions.precice.finalize();
+    adapter.precice.finalize();
   }
 } // namespace Linear_Elasticity
 
