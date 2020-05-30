@@ -136,9 +136,9 @@ namespace Adapter
     const std::string write_data_name;
 
     // These IDs are given by preCICE during initialization
-    int precice_mesh_id;
-    int precice_read_data_id;
-    int precice_write_data_id;
+    int mesh_id;
+    int read_data_id;
+    int write_data_id;
     int n_interface_nodes;
 
     // Dof IndexSets of the global deal.II vectors, containing relevant
@@ -223,9 +223,9 @@ namespace Adapter
 
     // get precice specific IDs from precice and store them in the class
     // they are later needed for data transfer
-    precice_mesh_id       = precice.getMeshID(mesh_name);
-    precice_read_data_id  = precice.getDataID(read_data_name, precice_mesh_id);
-    precice_write_data_id = precice.getDataID(write_data_name, precice_mesh_id);
+    mesh_id       = precice.getMeshID(mesh_name);
+    read_data_id  = precice.getDataID(read_data_name, mesh_id);
+    write_data_id = precice.getDataID(write_data_name, mesh_id);
 
 
     // get the number of interface nodes from deal.II
@@ -304,7 +304,7 @@ namespace Adapter
       }
 
     // pass node coordinates to precice
-    precice.setMeshVertices(precice_mesh_id,
+    precice.setMeshVertices(mesh_id,
                             n_interface_nodes,
                             interface_nodes_positions.data(),
                             interface_nodes_ids.data());
@@ -318,7 +318,7 @@ namespace Adapter
         // store initial write_data for precice in write_data
         format_deal_to_precice(deal_to_precice);
 
-        precice.writeBlockVectorData(precice_write_data_id,
+        precice.writeBlockVectorData(write_data_id,
                                      n_interface_nodes,
                                      interface_nodes_ids.data(),
                                      write_data.data());
@@ -332,7 +332,7 @@ namespace Adapter
     // read initial readData from preCICE if required for the first time step
     if (precice.isReadDataAvailable())
       {
-        precice.readBlockVectorData(precice_read_data_id,
+        precice.readBlockVectorData(read_data_id,
                                     n_interface_nodes,
                                     interface_nodes_ids.data(),
                                     read_data.data());
@@ -359,7 +359,7 @@ namespace Adapter
       {
         format_deal_to_precice(deal_to_precice);
 
-        precice.writeBlockVectorData(precice_write_data_id,
+        precice.writeBlockVectorData(write_data_id,
                                      n_interface_nodes,
                                      interface_nodes_ids.data(),
                                      write_data.data());
@@ -373,7 +373,7 @@ namespace Adapter
     // data in our global vector by calling format_precice_to_deal
     if (precice.isReadDataAvailable())
       {
-        precice.readBlockVectorData(precice_read_data_id,
+        precice.readBlockVectorData(read_data_id,
                                     n_interface_nodes,
                                     interface_nodes_ids.data(),
                                     read_data.data());
