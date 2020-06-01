@@ -368,23 +368,23 @@ namespace Nonlinear_Elasticity
     make_grid();
     system_setup();
     output_results();
-    time.increment();
 
     // Initialize preCICE before starting the time loop
     // Here, all information concerning the coupling is passed to preCICE
     adapter.initialize(dof_handler_ref, total_displacement, external_stress);
-
 
     BlockVector<NumberType> solution_delta(dofs_per_block);
 
     // Start the time loop. Steering is done by preCICE itself
     while (adapter.precice.isCouplingOngoing())
       {
-        solution_delta = 0.0;
-
         // If we have an implicit coupling, we need to save data before
         // advancing in time in order to restore it later
         adapter.save_current_state_if_required(state_variables, time);
+
+        solution_delta = 0.0;
+
+        time.increment();
 
         // Solve a the system using the Newton-Raphson algorithm
         solve_nonlinear_timestep(solution_delta);
@@ -395,12 +395,14 @@ namespace Nonlinear_Elasticity
         update_velocity(solution_delta);
         update_old_variables();
 
+        timer.enter_subsection("Advance adapter");
         // ... and pass the coupling data to preCICE, in this case displacement
         // (write data) and stress (read data)
         adapter.advance(total_displacement,
                         external_stress,
                         time.get_delta_t());
-        time.increment();
+
+        timer.leave_subsection("Advance adapter");
 
         // Restore the old state, if our implicit time step is not yet converged
         adapter.reload_old_state_if_required(state_variables, time);

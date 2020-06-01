@@ -188,8 +188,8 @@ namespace Linear_Elasticity
     if (parameters.scenario == "FSI3")
       {
         // FSI 3
-        n_x          = 30;
-        n_y          = 5;
+        n_x          = 18;
+        n_y          = 3;
         n_z          = 1;
         point_bottom = dim == 3 ? Point<dim>(0.24899, 0.19, -0.005) :
                                   Point<dim>(0.24899, 0.19);
@@ -202,11 +202,11 @@ namespace Linear_Elasticity
         id_flap_short_bottom = 0; // y direction
         id_flap_short_top    = 1;
       }
-    else if (parameters.scenario == "PF")
+    else
       {
         // flap_perp
-        n_x = 5;
-        n_y = 30;
+        n_x = 3;
+        n_y = 18;
         n_z = 1;
         point_bottom =
           dim == 3 ? Point<dim>(-0.05, 0, 0) : Point<dim>(-0.05, 0);
@@ -217,13 +217,6 @@ namespace Linear_Elasticity
         id_flap_long_top     = 1;
         id_flap_short_bottom = 2; // y direction
         id_flap_short_top    = 3;
-      }
-    else
-      {
-        std::cout
-          << "Selected scenario is not preconfigured. Options are FSI3 and PF. "
-          << "You might want to configure your own case in the make_grid function"
-          << std::endl;
       }
 
     // same for both scenarios
@@ -469,10 +462,9 @@ namespace Linear_Elasticity
   void
   ElastoDynamics<dim>::assemble_rhs()
   {
-    std::cout << "\t Assemble rhs " << std::endl;
-    system_rhs = 0.0;
-
     timer.enter_subsection("Assemble rhs");
+
+    system_rhs = 0.0;
 
     // quadrature formula for integration over faces (dim-1)
     QGauss<dim - 1> face_quadrature_formula(quad_order);
@@ -667,6 +659,12 @@ namespace Linear_Elasticity
     StrainPostprocessor<dim> strain_u;
 
     DataOut<dim> data_out;
+
+    // Note: There is at least paraView v 5.5 needed to visualize this output
+    DataOutBase::VtkFlags flags;
+    flags.write_higher_order_cells = true;
+    data_out.set_flags(flags);
+
     std::vector<DataComponentInterpretation::DataComponentInterpretation>
       data_component_interpretation(
         dim, DataComponentInterpretation::component_is_part_of_vector);
@@ -718,18 +716,19 @@ namespace Linear_Elasticity
     make_grid();
     setup_system();
     output_results();
-    time.increment();
 
     assemble_system();
     adapter.initialize(dof_handler, displacement, forces);
 
     while (adapter.precice.isCouplingOngoing())
       {
+        adapter.save_current_state_if_required(state_variables, time);
+
+        time.increment();
+
         std::cout << std::endl
                   << "Timestep " << time.get_timestep() << " @ "
                   << time.current() << "s" << std::endl;
-
-        adapter.save_current_state_if_required(state_variables, time);
 
         assemble_rhs();
 
@@ -737,9 +736,9 @@ namespace Linear_Elasticity
 
         update_displacement();
 
+        timer.enter_subsection("Advance adapter");
         adapter.advance(displacement, forces, time.get_delta_t());
-
-        time.increment();
+        timer.leave_subsection("Advance adapter");
 
         adapter.reload_old_state_if_required(state_variables, time);
 

@@ -7,14 +7,13 @@ namespace Adapter
 {
   using namespace dealii;
   /**
-   * @brief The Time class is nearly as originally included in the main file of
-   *        the solid solver. It keeps track of the current time step and
+   * @brief The Time class keeps track of the current time step and
    *        absolute time values. There are certainly different ways to
-   *        handle this in the solver. However, the class here has been
-   *        extended by a @p set_absolute_time() function, which allows to set
-   *        the time variables manually during simulation. This is necessary for
-   *        subcycling and allows a more compact notation. This function is also
-   *        used in the @p CouplingFunctions class.
+   *        handle this in the solver. However, the class has a function
+   *        @p set_absolute_time(), which allows to set the time variables
+   *        manually during simulation. This is necessary for subcycling
+   *        and allows a more compact notation. This function is also
+   *        used in the @p Adapter class.
    *
    *        The remaining member functions are self-explanatory.
    *
