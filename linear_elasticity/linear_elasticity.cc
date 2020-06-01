@@ -173,8 +173,6 @@ namespace Linear_Elasticity
   void
   ElastoDynamics<dim>::make_grid()
   {
-    std::cout << "  Create mesh: " << std::endl;
-
     uint n_x, n_y, n_z;
 
     Point<dim> point_bottom;
@@ -242,9 +240,6 @@ namespace Linear_Elasticity
 
     triangulation.refine_global(global_refinement);
 
-    std::cout << "\t Number of active cells:       "
-              << triangulation.n_active_cells() << std::endl;
-
     // set the desired IDs for clamped boundaries and out_of_plane clamped
     // boundaries interface ID is set in the parameter file
     clamped_mesh_id              = 0;
@@ -297,9 +292,6 @@ namespace Linear_Elasticity
                                     /*keep_constrained_dofs = */ true);
     sparsity_pattern.copy_from(dsp);
 
-    std::cout << "\t Number of degrees of freedom: " << dof_handler.n_dofs()
-              << std::endl;
-
     mass_matrix.reinit(sparsity_pattern);
     stiffness_matrix.reinit(sparsity_pattern);
     system_matrix.reinit(sparsity_pattern);
@@ -323,6 +315,12 @@ namespace Linear_Elasticity
 
     gravitational_force.reinit(dof_handler.n_dofs());
 
+    std::cout << "Triangulation:"
+              << "\n\t Number of active cells: "
+              << triangulation.n_active_cells()
+              << "\n\t Polynomial degree: " << parameters.poly_degree
+              << "\n\t Number of degrees of freedom: "
+              << dof_handler_ref.n_dofs() << std::endl;
 
     state_variables = {
       &old_velocity, &velocity, &old_displacement, &displacement, &old_forces};
