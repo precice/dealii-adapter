@@ -5,7 +5,7 @@
 
 // Calculate Strains and pass displacement to the dof_handler
 // TODO: Strains are symmetric. Currently all tensor components are processed
-namespace Nonlinear_Elasticity
+namespace Linear_Elasticity
 {
   using namespace dealii;
   /**
@@ -121,5 +121,5 @@ namespace Nonlinear_Elasticity
     return update_values | update_gradients;
   }
 
-} // namespace Nonlinear_Elasticity
+} // namespace Linear_Elasticity
 #endif // POSTPROCESSOR_H

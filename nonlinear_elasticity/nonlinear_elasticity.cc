@@ -395,6 +395,9 @@ namespace Nonlinear_Elasticity
         update_velocity(solution_delta);
         update_old_variables();
 
+        // We are interested in some timings. Here, we measure, how much time we
+        // spent through coupling. In case of a parallel coupling schemes, we
+        // can directly see the load balancing
         timer.enter_subsection("Advance adapter");
         // ... and pass the coupling data to preCICE, in this case displacement
         // (write data) and stress (read data)
@@ -1435,6 +1438,7 @@ namespace Nonlinear_Elasticity
   void
   Solid<dim, NumberType>::output_results() const
   {
+    timer.enter_subsection("Output results");
     DataOut<dim> data_out;
 
     // Note: There is at least paraView v 5.5 needed to visualize this output
@@ -1453,7 +1457,7 @@ namespace Nonlinear_Elasticity
       soln(i) = total_displacement(i);
     MappingQEulerian<dim> q_mapping(degree, dof_handler_ref, soln);
 
-    data_out.build_patches(q_mapping, degree, DataOut<dim>::curved_inner_cells);
+    data_out.build_patches(q_mapping, degree, DataOut<dim>::curved_boundary);
 
     std::ostringstream filename;
     filename << case_path << "solution-"
@@ -1461,6 +1465,7 @@ namespace Nonlinear_Elasticity
 
     std::ofstream output(filename.str().c_str());
     data_out.write_vtk(output);
+    timer.leave_subsection("Output results");
   }
 
 } // namespace Nonlinear_Elasticity

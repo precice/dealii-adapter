@@ -38,43 +38,12 @@
 #include "../adapter/adapter.h"
 #include "../adapter/time.h"
 #include "include/parameter_handling.h"
+#include "include/postprocessor.h"
 #include "precice/SolverInterface.hpp"
 
 namespace Linear_Elasticity
 {
   using namespace dealii;
-
-  // evaluate strains as a tensor in the data out object
-  template <int dim>
-  class StrainPostprocessor : public DataPostprocessorTensor<dim>
-  {
-  public:
-    StrainPostprocessor()
-      : DataPostprocessorTensor<dim>("strain", update_gradients)
-    {}
-    virtual void
-    evaluate_vector_field(
-      const DataPostprocessorInputs::Vector<dim> &input_data,
-      std::vector<Vector<double>> &               computed_quantities) const
-    {
-      AssertDimension(input_data.solution_gradients.size(),
-                      computed_quantities.size());
-      for (unsigned int p = 0; p < input_data.solution_gradients.size(); ++p)
-        {
-          AssertDimension(computed_quantities[p].size(),
-                          (Tensor<2, dim>::n_independent_components));
-          for (unsigned int d = 0; d < dim; ++d)
-            for (unsigned int e = 0; e < dim; ++e)
-              computed_quantities[p]
-                                 [Tensor<2, dim>::component_to_unrolled_index(
-                                   TableIndices<2>(d, e))] =
-                                   (input_data.solution_gradients[p][d][e] +
-                                    input_data.solution_gradients[p][e][d]) /
-                                   2;
-        }
-    }
-  };
-
 
   template <int dim>
   class ElastoDynamics
@@ -319,8 +288,8 @@ namespace Linear_Elasticity
               << "\n\t Number of active cells: "
               << triangulation.n_active_cells()
               << "\n\t Polynomial degree: " << parameters.poly_degree
-              << "\n\t Number of degrees of freedom: "
-              << dof_handler_ref.n_dofs() << std::endl;
+              << "\n\t Number of degrees of freedom: " << dof_handler.n_dofs()
+              << std::endl;
 
     state_variables = {
       &old_velocity, &velocity, &old_displacement, &displacement, &old_forces};
@@ -653,9 +622,6 @@ namespace Linear_Elasticity
   ElastoDynamics<dim>::output_results() const
   {
     timer.enter_subsection("Output results");
-    // compute the strains save it in the outputfiles
-    StrainPostprocessor<dim> strain_u;
-
     DataOut<dim> data_out;
 
     // Note: There is at least paraView v 5.5 needed to visualize this output
@@ -663,24 +629,18 @@ namespace Linear_Elasticity
     flags.write_higher_order_cells = true;
     data_out.set_flags(flags);
 
-    std::vector<DataComponentInterpretation::DataComponentInterpretation>
-      data_component_interpretation(
-        dim, DataComponentInterpretation::component_is_part_of_vector);
-
-    std::vector<std::string> solution_name(dim, "displacement");
     data_out.attach_dof_handler(dof_handler);
-    data_out.add_data_vector(displacement,
-                             solution_name,
-                             DataOut<dim>::type_dof_data,
-                             data_component_interpretation);
 
-    data_out.add_data_vector(displacement, strain_u);
+    Postprocessor<dim> postprocessor;
+    data_out.add_data_vector(displacement, postprocessor);
 
     // visualize the displacements on a displaced grid
     MappingQEulerian<dim> q_mapping(parameters.poly_degree,
                                     dof_handler,
                                     displacement);
-    data_out.build_patches(q_mapping, parameters.poly_degree);
+    data_out.build_patches(q_mapping,
+                           parameters.poly_degree,
+                           DataOut<dim>::curved_boundary);
 
     // check, if the output directory exists
     std::ifstream output_directory(case_path + "dealii_output");
