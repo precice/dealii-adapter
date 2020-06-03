@@ -106,9 +106,9 @@ namespace Linear_Elasticity
     }
 
     /**
-     * @brief The Materials struct
+     * @brief The System struct keeps material properties and body force contributions
      */
-    struct Materials
+    struct System
     {
       double               mu;
       double               lambda;
@@ -124,9 +124,9 @@ namespace Linear_Elasticity
     };
 
     void
-    Materials::declare_parameters(ParameterHandler &prm)
+    System::declare_parameters(ParameterHandler &prm)
     {
-      prm.enter_subsection("Material properties");
+      prm.enter_subsection("System properties");
       {
         prm.declare_entry("mu", "0.5e6", Patterns::Double(), "mu");
 
@@ -143,9 +143,9 @@ namespace Linear_Elasticity
     }
 
     void
-    Materials::parse_parameters(ParameterHandler &prm)
+    System::parse_parameters(ParameterHandler &prm)
     {
-      prm.enter_subsection("Material properties");
+      prm.enter_subsection("System properties");
       {
         mu     = prm.get_double("mu");
         lambda = prm.get_double("lambda");
@@ -288,7 +288,7 @@ namespace Linear_Elasticity
 
     struct AllParameters : public LinearSolver,
                            public Discretization,
-                           public Materials,
+                           public System,
                            public Time,
                            public PreciceAdapterConfiguration
 
@@ -319,7 +319,7 @@ namespace Linear_Elasticity
     {
       LinearSolver::declare_parameters(prm);
       Discretization::declare_parameters(prm);
-      Materials::declare_parameters(prm);
+      System::declare_parameters(prm);
       Time::declare_parameters(prm);
       PreciceAdapterConfiguration::declare_parameters(prm);
     }
@@ -329,7 +329,7 @@ namespace Linear_Elasticity
     {
       LinearSolver::parse_parameters(prm);
       Discretization::parse_parameters(prm);
-      Materials::parse_parameters(prm);
+      System::parse_parameters(prm);
       Time::parse_parameters(prm);
       PreciceAdapterConfiguration::parse_parameters(prm);
     }

@@ -22,7 +22,7 @@ subsection Discretization
     set Polynomial degree   = 3
 end
 
-subsection Material properties
+subsection System properties
     # mu (shear modulus)
     set mu                   = 0.5e6
 

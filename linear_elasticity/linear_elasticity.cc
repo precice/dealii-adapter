@@ -409,7 +409,7 @@ namespace Linear_Elasticity
           bf_vector[d] = parameters.rho * parameters.body_force[d];
 
         // create a constant function object
-        Functions::ConstantFunction<dim, double> bf_function(bf_vector);
+        Functions::ConstantFunction<dim> bf_function(bf_vector);
 
         // create the contribution to the right-hand side vector
         VectorTools::create_right_hand_side(mapping,
