@@ -103,8 +103,8 @@ namespace Linear_Elasticity
     Vector<double> stress;
     Vector<double> system_rhs;
 
-    bool           compute_gravity;
-    Vector<double> gravitational_force;
+    const bool     body_force_enabled;
+    Vector<double> body_force_vector;
     double         gravity_value;
     int            gravity_direction;
 
@@ -127,6 +127,7 @@ namespace Linear_Elasticity
     , fe(FE_Q<dim>(parameters.poly_degree), dim)
     , mapping(MappingQGeneric<dim>(parameters.poly_degree))
     , quad_order(parameters.poly_degree + 1)
+    , body_force_enabled(parameters.body_force.norm() > 1e-15)
     , adapter(parameters, interface_boundary_id)
     , case_path(case_path)
   {}
@@ -266,11 +267,12 @@ namespace Linear_Elasticity
     system_matrix.reinit(sparsity_pattern);
     stepping_matrix.reinit(sparsity_pattern);
 
-    MatrixCreator::create_mass_matrix(mapping,
-                                      dof_handler,
-                                      QGauss<dim>(quad_order),
-                                      mass_matrix);
-    mass_matrix *= parameters.rho;
+    {
+      Functions::ConstantFunction<dim> rho_f(parameters.rho);
+
+      MatrixCreator::create_mass_matrix(
+        mapping, dof_handler, QGauss<dim>(quad_order), mass_matrix, &rho_f);
+    }
 
     old_velocity.reinit(dof_handler.n_dofs());
     velocity.reinit(dof_handler.n_dofs());
@@ -282,7 +284,7 @@ namespace Linear_Elasticity
     old_stress.reinit(dof_handler.n_dofs());
     stress.reinit(dof_handler.n_dofs());
 
-    gravitational_force.reinit(dof_handler.n_dofs());
+    body_force_vector.reinit(dof_handler.n_dofs());
 
     std::cout << "Triangulation:"
               << "\n\t Number of active cells: "
@@ -297,11 +299,6 @@ namespace Linear_Elasticity
     // loads at time 0
     // TODO: Check, if initial conditions should be set at the beginning
     old_stress = 0.0;
-
-    // const value of gravity (e.g. 9.81) and its direction (x (0),y(1) or z(2))
-    compute_gravity   = false;
-    gravity_value     = -2;
-    gravity_direction = 1;
   }
 
 
@@ -405,22 +402,21 @@ namespace Linear_Elasticity
     hanging_node_constraints.condense(stepping_matrix);
 
     // Calculate contribution of gravity and store them in gravitational_force
-    if (compute_gravity)
+    if (body_force_enabled)
       {
-        Vector<double> gravity_vector(dim);
-        // assign the specified values, rho * g is assumed
-        gravity_vector[gravity_direction] = parameters.rho * gravity_value;
+        Vector<double> bf_vector(dim);
+        for (uint d = 0; d < dim; ++d)
+          bf_vector[d] = parameters.rho * parameters.body_force[d];
 
         // create a constant function object
-        Functions::ConstantFunction<dim, double> gravity_function(
-          gravity_vector);
+        Functions::ConstantFunction<dim, double> bf_function(bf_vector);
 
         // create the contribution to the right-hand side vector
         VectorTools::create_right_hand_side(mapping,
                                             dof_handler,
                                             QGauss<dim>(quad_order),
-                                            gravity_function,
-                                            gravitational_force);
+                                            bf_function,
+                                            body_force_vector);
       }
   }
 
@@ -496,8 +492,8 @@ namespace Linear_Elasticity
     old_displacement = displacement;
 
     // add contribution of gravitational forces
-    if (compute_gravity)
-      system_rhs.add(1, gravitational_force);
+    if (body_force_enabled)
+      system_rhs.add(1, body_force_vector);
 
     // assemble global RHS:
     // RHS=(M-theta*(1-theta)*delta_t^2*K)*V_n - delta_t*K* D_n +

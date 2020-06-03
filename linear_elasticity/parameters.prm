@@ -30,7 +30,10 @@ subsection Material properties
     set lambda               = 2e6
 
     # density
-    set density              = 1000
+    set rho                  = 1000
+
+    # Body forces x,y,z
+    set body forces     = 0.0,0.0,0.0
 end
 
 subsection Linear solver

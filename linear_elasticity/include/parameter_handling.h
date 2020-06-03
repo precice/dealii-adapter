@@ -110,9 +110,11 @@ namespace Linear_Elasticity
      */
     struct Materials
     {
-      double mu;
-      double lambda;
-      double rho;
+      double               mu;
+      double               lambda;
+      double               rho;
+      Tensor<1, 3, double> body_force;
+
 
       static void
       declare_parameters(ParameterHandler &prm);
@@ -130,7 +132,12 @@ namespace Linear_Elasticity
 
         prm.declare_entry("lambda", "2e6", Patterns::Double(), "lambda");
 
-        prm.declare_entry("density", "1000", Patterns::Double(0.0), "density");
+        prm.declare_entry("rho", "1000", Patterns::Double(0.0), "density");
+
+        prm.declare_entry("body forces",
+                          "0,0,0",
+                          Patterns::List(Patterns::Double()),
+                          "body forces x,y,z");
       }
       prm.leave_subsection();
     }
@@ -142,7 +149,11 @@ namespace Linear_Elasticity
       {
         mu     = prm.get_double("mu");
         lambda = prm.get_double("lambda");
-        rho    = prm.get_double("density");
+        rho    = prm.get_double("rho");
+        const std::vector<std::string> body_forces_input =
+          Utilities::split_string_list(prm.get("body forces"));
+        for (uint d = 0; d < 3; ++d)
+          body_force[d] = Utilities::string_to_double(body_forces_input[d]);
       }
       prm.leave_subsection();
     }
