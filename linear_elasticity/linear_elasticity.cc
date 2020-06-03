@@ -564,38 +564,39 @@ namespace Linear_Elasticity
   {
     timer.enter_subsection("Solve system");
 
-    const std::string solver_type = "Direct";
+    uint   lin_it  = 1;
+    double lin_res = 0.0;
 
-    uint   lin_it;
-    double lin_res;
-
-    if (solver_type == "CG")
+    if (parameters.type_lin == "CG")
       {
         std::cout << "\t CG solver: " << std::endl;
-        SolverControl solver_control(1000, 1e-12);
-        SolverCG<>    cg(solver_control);
+
+        const int solver_its =
+          system_matrix.m() * parameters.max_iterations_lin;
+        const double tol_sol = parameters.tol_lin * system_rhs.l2_norm();
+
+        SolverControl         solver_control(solver_its, tol_sol);
+        GrowingVectorMemory<> GVM;
+        SolverCG<>            solver_CG(solver_control, GVM);
 
         PreconditionSSOR<> preconditioner;
         preconditioner.initialize(system_matrix, 1.2);
 
-        cg.solve(system_matrix, velocity, system_rhs, preconditioner);
+        solver_CG.solve(system_matrix, velocity, system_rhs, preconditioner);
 
         lin_it  = solver_control.last_step();
         lin_res = solver_control.last_value();
       }
-    else if (solver_type == "Direct")
+    else if (parameters.type_lin == "Direct")
       {
         std::cout << "\t Direct solver: " << std::endl;
 
         SparseDirectUMFPACK A_direct;
         A_direct.initialize(system_matrix);
         A_direct.vmult(velocity, system_rhs);
-
-        lin_it  = 1;
-        lin_res = 0.0;
       }
     else
-      Assert(solver_type == "Direct" || solver_type == "CG",
+      Assert(parameters.type_lin == "Direct" || parameters.type_lin == "CG",
              ExcNotImplemented());
 
     // assert divergence

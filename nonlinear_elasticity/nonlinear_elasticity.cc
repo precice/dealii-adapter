@@ -1422,7 +1422,8 @@ namespace Nonlinear_Elasticity
           lin_res = 0.0;
         }
       else
-        Assert(false, ExcMessage("Linear solver type not implemented"));
+        Assert(solver_type == "Direct" || solver_type == "CG",
+               ExcMessage("Linear solver type not implemented"));
 
       timer.leave_subsection();
     }

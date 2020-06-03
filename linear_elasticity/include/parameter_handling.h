@@ -10,7 +10,7 @@ namespace Linear_Elasticity
   /**
    * This class declares all parameters, which can be specified in the parameter
    * file. The subsection abut preCICE configurations is directly interlinked
-   * to the CouplingFunctions class.
+   * to the Adapter class.
    */
   namespace Parameters
   {
@@ -19,7 +19,6 @@ namespace Linear_Elasticity
     {
       double delta_t;
       double end_time;
-      double theta;
       int    output_interval;
 
       static void
@@ -45,11 +44,6 @@ namespace Linear_Elasticity
                           "1",
                           Patterns::Integer(0),
                           "Write results every x timesteps");
-
-        prm.declare_entry("theta",
-                          "0.5",
-                          Patterns::Double(0, 1),
-                          "Time integration scheme");
       }
       prm.leave_subsection();
     }
@@ -62,11 +56,58 @@ namespace Linear_Elasticity
         end_time        = prm.get_double("End time");
         delta_t         = prm.get_double("Time step size");
         output_interval = prm.get_integer("Output interval");
-        theta           = prm.get_double("theta");
       }
       prm.leave_subsection();
     }
 
+    /**
+     * @brief Discretization: Specifies parameters for time integration by a
+     *        theta scheme and polynomial degree of the FE system
+     */
+    struct Discretization
+    {
+      double       theta;
+      unsigned int poly_degree;
+
+      static void
+      declare_parameters(ParameterHandler &prm);
+
+      void
+      parse_parameters(ParameterHandler &prm);
+    };
+
+    void
+    Discretization::declare_parameters(ParameterHandler &prm)
+    {
+      prm.enter_subsection("Discretization");
+      {
+        prm.declare_entry("theta",
+                          "0.5",
+                          Patterns::Double(0, 1),
+                          "Time integration scheme");
+
+        prm.declare_entry("Polynomial degree",
+                          "3",
+                          Patterns::Integer(0),
+                          "Polynomial degree of the FE system");
+      }
+      prm.leave_subsection();
+    }
+
+    void
+    Discretization::parse_parameters(ParameterHandler &prm)
+    {
+      prm.enter_subsection("Discretization");
+      {
+        theta       = prm.get_double("theta");
+        poly_degree = prm.get_integer("Polynomial degree");
+      }
+      prm.leave_subsection();
+    }
+
+    /**
+     * @brief The Materials struct
+     */
     struct Materials
     {
       double mu;
@@ -106,9 +147,14 @@ namespace Linear_Elasticity
       prm.leave_subsection();
     }
 
-    struct FESystem
+    /**
+     * @brief LinearSolver: Specifies linear solver properties
+     */
+    struct LinearSolver
     {
-      unsigned int poly_degree;
+      std::string type_lin;
+      double      tol_lin;
+      double      max_iterations_lin;
 
       static void
       declare_parameters(ParameterHandler &prm);
@@ -117,26 +163,38 @@ namespace Linear_Elasticity
       parse_parameters(ParameterHandler &prm);
     };
 
-
     void
-    FESystem::declare_parameters(ParameterHandler &prm)
+    LinearSolver::declare_parameters(ParameterHandler &prm)
     {
-      prm.enter_subsection("Finite element system");
+      prm.enter_subsection("Linear solver");
       {
-        prm.declare_entry("Polynomial degree",
-                          "1",
-                          Patterns::Integer(0),
-                          "Polynomial degree of the FE system");
+        prm.declare_entry("Solver type",
+                          "Direct",
+                          Patterns::Selection("CG|Direct"),
+                          "Type of solver used to solve the linear system");
+
+        prm.declare_entry("Residual",
+                          "1e-6",
+                          Patterns::Double(0.0),
+                          "Linear solver residual (scaled by residual norm)");
+
+        prm.declare_entry(
+          "Max iteration multiplier",
+          "1",
+          Patterns::Double(0.0),
+          "Linear solver iterations (multiples of the system matrix size)");
       }
       prm.leave_subsection();
     }
 
     void
-    FESystem::parse_parameters(ParameterHandler &prm)
+    LinearSolver::parse_parameters(ParameterHandler &prm)
     {
-      prm.enter_subsection("Finite element system");
+      prm.enter_subsection("Linear solver");
       {
-        poly_degree = prm.get_integer("Polynomial degree");
+        type_lin           = prm.get("Solver type");
+        tol_lin            = prm.get_double("Residual");
+        max_iterations_lin = prm.get_double("Max iteration multiplier");
       }
       prm.leave_subsection();
     }
@@ -217,7 +275,8 @@ namespace Linear_Elasticity
 
 
 
-    struct AllParameters : public FESystem,
+    struct AllParameters : public LinearSolver,
+                           public Discretization,
                            public Materials,
                            public Time,
                            public PreciceAdapterConfiguration
@@ -247,7 +306,8 @@ namespace Linear_Elasticity
     void
     AllParameters::declare_parameters(ParameterHandler &prm)
     {
-      FESystem::declare_parameters(prm);
+      LinearSolver::declare_parameters(prm);
+      Discretization::declare_parameters(prm);
       Materials::declare_parameters(prm);
       Time::declare_parameters(prm);
       PreciceAdapterConfiguration::declare_parameters(prm);
@@ -256,7 +316,8 @@ namespace Linear_Elasticity
     void
     AllParameters::parse_parameters(ParameterHandler &prm)
     {
-      FESystem::parse_parameters(prm);
+      LinearSolver::parse_parameters(prm);
+      Discretization::parse_parameters(prm);
       Materials::parse_parameters(prm);
       Time::parse_parameters(prm);
       PreciceAdapterConfiguration::parse_parameters(prm);

@@ -11,10 +11,15 @@ subsection Time
 
     # Write results every x timesteps
     set Output interval       = 10
+end
 
+subsection Discretization
     # Time integration scheme 
     # 0 = forward, 1 = backward
-    set theta                 = 0.5
+    set theta               = 0.5
+
+    # Polynomial degree of the FE system
+    set Polynomial degree   = 3
 end
 
 subsection Material properties
@@ -28,9 +33,15 @@ subsection Material properties
     set density              = 1000
 end
 
-subsection Finite element system
-    # Polynomial degree of the FE system
-    set Polynomial degree   = 3
+subsection Linear solver
+  # Linear solver iterations (multiples of the system matrix size)
+  set Max iteration multiplier  = 1
+
+  # Linear solver residual (scaled by residual norm)
+  set Residual                  = 1e-6
+
+  # Type of solver used to solve the linear system
+  set Solver type               = Direct
 end
 
 subsection precice configuration

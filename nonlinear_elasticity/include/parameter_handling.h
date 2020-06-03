@@ -10,7 +10,7 @@ namespace Nonlinear_Elasticity
   /**
    * This class declares all parameters, which can be specified in the parameter
    * file. The subsection abut preCICE configurations is directly interlinked
-   * to the CouplingFunctions class.
+   * to the Adapter class.
    */
   namespace Parameters
   {
