@@ -99,8 +99,8 @@ namespace Linear_Elasticity
     Vector<double> velocity;
     Vector<double> old_displacement;
     Vector<double> displacement;
-    Vector<double> old_forces;
-    Vector<double> forces;
+    Vector<double> old_stress;
+    Vector<double> stress;
     Vector<double> system_rhs;
 
     bool           compute_gravity;
@@ -279,8 +279,8 @@ namespace Linear_Elasticity
     displacement.reinit(dof_handler.n_dofs());
 
     system_rhs.reinit(dof_handler.n_dofs());
-    old_forces.reinit(dof_handler.n_dofs());
-    forces.reinit(dof_handler.n_dofs());
+    old_stress.reinit(dof_handler.n_dofs());
+    stress.reinit(dof_handler.n_dofs());
 
     gravitational_force.reinit(dof_handler.n_dofs());
 
@@ -292,11 +292,11 @@ namespace Linear_Elasticity
               << std::endl;
 
     state_variables = {
-      &old_velocity, &velocity, &old_displacement, &displacement, &old_forces};
+      &old_velocity, &velocity, &old_displacement, &displacement, &old_stress};
 
     // loads at time 0
     // TODO: Check, if initial conditions should be set at the beginning
-    old_forces = 0.0;
+    old_stress = 0.0;
 
     // const value of gravity (e.g. 9.81) and its direction (x (0),y(1) or z(2))
     compute_gravity   = false;
@@ -468,7 +468,7 @@ namespace Linear_Elasticity
               // In contrast to the nonlinear solver, no pull back is performed.
               // The equilibrium is stated in reference configuration, but only
               // valid for very small deformations
-              fe_face_values.get_function_values(forces, local_stress);
+              fe_face_values.get_function_values(stress, local_stress);
 
               for (unsigned int f_q_point = 0; f_q_point < n_face_q_points;
                    ++f_q_point)
@@ -510,8 +510,8 @@ namespace Linear_Elasticity
     tmp = system_rhs;
 
     system_rhs *= time.get_delta_t() * parameters.theta;
-    system_rhs.add(time.get_delta_t() * (1 - parameters.theta), old_forces);
-    old_forces = tmp;
+    system_rhs.add(time.get_delta_t() * (1 - parameters.theta), old_stress);
+    old_stress = tmp;
 
     mass_matrix.vmult(tmp, old_velocity);
     system_rhs.add(1, tmp);
@@ -677,7 +677,7 @@ namespace Linear_Elasticity
     output_results();
 
     assemble_system();
-    adapter.initialize(dof_handler, displacement, forces);
+    adapter.initialize(dof_handler, displacement, stress);
 
     while (adapter.precice.isCouplingOngoing())
       {
@@ -696,7 +696,7 @@ namespace Linear_Elasticity
         update_displacement();
 
         timer.enter_subsection("Advance adapter");
-        adapter.advance(displacement, forces, time.get_delta_t());
+        adapter.advance(displacement, stress, time.get_delta_t());
         timer.leave_subsection("Advance adapter");
 
         adapter.reload_old_state_if_required(state_variables, time);
