@@ -644,8 +644,8 @@ namespace Nonlinear_Elasticity
     BlockVector<double> &solution_delta)
   {
     std::cout << std::endl
-              << "Timestep " << time.get_timestep() << " @ " << time.current()
-              << "s" << std::endl;
+              << "Timestep " << time.get_timestep() << " @ " << std::fixed
+              << time.current() << "s" << std::endl;
 
     BlockVector<double> newton_update(dofs_per_block);
 

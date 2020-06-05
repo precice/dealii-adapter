@@ -41,6 +41,8 @@
 #include "include/postprocessor.h"
 #include "precice/SolverInterface.hpp"
 
+// The Linear_Elasticity case includes a linear elastic material with a one-step
+// theta time integration
 namespace Linear_Elasticity
 {
   using namespace dealii;
@@ -51,50 +53,66 @@ namespace Linear_Elasticity
   public:
     ElastoDynamics(const std::string &case_path);
     ~ElastoDynamics();
+    // As usual in dealii, the run function covers the main time loop of the
+    // system
     void
     run();
 
   private:
+    // Create the mesh and set boundary IDs for different boundary conditions
     void
     make_grid();
+
+    // Set up the FE system and allocate data structures
     void
     setup_system();
+
+    // Compute time invariant matrices e.g. stiffness matrix and mass matrix
     void
     assemble_system();
+
+    // Assemble the Neumann contribution i.e. the coupling data obtained from
+    // the Fluid participant
     void
     assemble_rhs();
+
+    // Solve the linear system
     void
     solve();
+
+    // Update the displacement according to the theta scheme
     void
     update_displacement();
+
+    // Output results to vtk files
     void
     output_results() const;
 
-
+    // Paramter class parsing all user specific input parameters
     Parameters::AllParameters parameters;
 
-    // grid related variables
-    Triangulation<dim> triangulation;
+    // Boundary IDs, reserved for the respectve application
     unsigned int       clamped_mesh_id;
     unsigned int       out_of_plane_clamped_mesh_id;
     const unsigned int interface_boundary_id;
 
-    Adapter::Time       time;
-    mutable TimerOutput timer;
-    DoFHandler<dim>     dof_handler;
-
+    // Dealii typical objects
+    Triangulation<dim>   triangulation;
+    DoFHandler<dim>      dof_handler;
     FESystem<dim>        fe;
     MappingQGeneric<dim> mapping;
     const unsigned int   quad_order;
 
     AffineConstraints<double> hanging_node_constraints;
 
+    // Matrices used during computations
     SparsityPattern      sparsity_pattern;
     SparseMatrix<double> mass_matrix;
     SparseMatrix<double> stiffness_matrix;
     SparseMatrix<double> system_matrix;
     SparseMatrix<double> stepping_matrix;
 
+    // Time dependent variables
     Vector<double> old_velocity;
     Vector<double> velocity;
     Vector<double> old_displacement;
@@ -103,41 +121,56 @@ namespace Linear_Elasticity
     Vector<double> stress;
     Vector<double> system_rhs;
 
+    // Body forces e.g. gravity. Values are specified in the input file
     const bool     body_force_enabled;
     Vector<double> body_force_vector;
-    double         gravity_value;
-    int            gravity_direction;
 
+    // In order to measure some timings
+    mutable TimerOutput timer;
+
+    // The main adapter objects: The time class keeps track of the current time
+    // and time steps. The Adapter class includes all functionalities for
+    // coupling via preCICE. Look at the documentation of the class for more
+    // information.
+    Adapter::Time                                                    time;
     Adapter::Adapter<dim, Vector<double>, Parameters::AllParameters> adapter;
 
+    // Alias for all time dependent variables, which should be saved/reloaded
+    // in case of an implicit coupling. This vector is directly used in the
+    // Adapter class
     std::vector<Vector<double> *> state_variables;
     // for the output directory
     const std::string case_path;
   };
 
 
-  // constructor
+
+  // Constructor
   template <int dim>
   ElastoDynamics<dim>::ElastoDynamics(const std::string &case_path)
     : parameters(case_path + "parameters.prm")
     , interface_boundary_id(6)
-    , time(parameters.end_time, parameters.delta_t)
-    , timer(std::cout, TimerOutput::summary, TimerOutput::wall_times)
     , dof_handler(triangulation)
     , fe(FE_Q<dim>(parameters.poly_degree), dim)
     , mapping(MappingQGeneric<dim>(parameters.poly_degree))
     , quad_order(parameters.poly_degree + 1)
     , body_force_enabled(parameters.body_force.norm() > 1e-15)
+    , timer(std::cout, TimerOutput::summary, TimerOutput::wall_times)
+    , time(parameters.end_time, parameters.delta_t)
     , adapter(parameters, interface_boundary_id)
     , case_path(case_path)
   {}
 
-  // destructor
+
+
+  // Destructor
   template <int dim>
   ElastoDynamics<dim>::~ElastoDynamics()
   {
     dof_handler.clear();
   }
+
+
 
   template <int dim>
   void
@@ -145,6 +178,7 @@ namespace Linear_Elasticity
   {
     uint n_x, n_y, n_z;
 
+    // Both preconfigured cases consist of a rectangle
     Point<dim> point_bottom;
     Point<dim> point_tip;
 
@@ -152,7 +186,7 @@ namespace Linear_Elasticity
     uint id_flap_long_bottom, id_flap_long_top, id_flap_short_bottom,
       id_flap_short_top, id_flap_out_of_plane_bottom, id_flap_out_of_plane_top;
 
-
+    // Hron & Turek FSI3 case
     if (parameters.scenario == "FSI3")
       {
         // FSI 3
@@ -172,7 +206,7 @@ namespace Linear_Elasticity
       }
     else
       {
-        // flap_perp
+        // Flap_perp case
         n_x = 3;
         n_y = 18;
         n_z = 1;
@@ -187,11 +221,11 @@ namespace Linear_Elasticity
         id_flap_short_top    = 3;
       }
 
-    // same for both scenarios
+    // Same for both scenarios, only relevant for quasi-2D
     id_flap_out_of_plane_bottom = 4; // z direction
     id_flap_out_of_plane_top    = 5;
 
-    // vector of dim values denoting the number of cells to generate in that
+    // Vector of dim values denoting the number of cells to generate in that
     // direction
     std::vector<unsigned int> repetitions(dim);
     repetitions[0] = n_x;
@@ -205,17 +239,18 @@ namespace Linear_Elasticity
                                               point_tip,
                                               /*colorize*/ true);
 
-    // refine all cells global_refinement times
+    // Refine all cells global_refinement times
     const unsigned int global_refinement = 0;
-
     triangulation.refine_global(global_refinement);
 
-    // set the desired IDs for clamped boundaries and out_of_plane clamped
-    // boundaries interface ID is set in the parameter file
+    // Set the desired IDs for clamped boundaries and out_of_plane clamped
+    // boundaries. The interface ID (refering to the coupling) is specified in
+    // the Constructor, since it is needed by the Constructor of the Adapter
+    // class.
     clamped_mesh_id              = 0;
     out_of_plane_clamped_mesh_id = 4;
 
-    // the IDs must not be the same:
+    // The IDs must not be the same:
     std::string error_message(
       "The interface_id cannot be the same as the clamped one");
     Assert(clamped_mesh_id != interface_boundary_id, ExcMessage(error_message));
@@ -224,31 +259,33 @@ namespace Linear_Elasticity
     Assert(interface_boundary_id == adapter.deal_boundary_interface_id,
            ExcMessage("Wrong interface ID in the Adapter specified"));
 
+    // Iterate over all cells and set the IDs
     for (const auto &cell : triangulation.active_cell_iterators())
       for (const auto &face : cell->face_iterators())
         if (face->at_boundary() == true)
           {
-            // boundaries for the interface
+            // Boundaries for the interface
             if (face->boundary_id() == id_flap_short_top ||
                 face->boundary_id() == id_flap_long_bottom ||
                 face->boundary_id() == id_flap_long_top)
               face->set_boundary_id(interface_boundary_id);
-            // boundaries clamped in all directions
+            // Boundaries clamped in all directions
             else if (face->boundary_id() == id_flap_short_bottom)
               face->set_boundary_id(clamped_mesh_id);
-            // boundaries clamped out-of-plane (z) direction
+            // Boundaries clamped out-of-plane (z) direction
             else if (face->boundary_id() == id_flap_out_of_plane_bottom ||
                      face->boundary_id() == id_flap_out_of_plane_top)
               face->set_boundary_id(out_of_plane_clamped_mesh_id);
           }
   }
 
+
+
   template <int dim>
   void
   ElastoDynamics<dim>::setup_system()
   {
-    std::cout << "  Setup system: " << std::endl;
-
+    // This follows the usual dealii steps
     dof_handler.distribute_dofs(fe);
     hanging_node_constraints.clear();
     DoFTools::make_hanging_node_constraints(dof_handler,
@@ -262,18 +299,13 @@ namespace Linear_Elasticity
                                     /*keep_constrained_dofs = */ true);
     sparsity_pattern.copy_from(dsp);
 
+    // Initialize relevant matrices
     mass_matrix.reinit(sparsity_pattern);
     stiffness_matrix.reinit(sparsity_pattern);
     system_matrix.reinit(sparsity_pattern);
     stepping_matrix.reinit(sparsity_pattern);
 
-    {
-      Functions::ConstantFunction<dim> rho_f(parameters.rho);
-
-      MatrixCreator::create_mass_matrix(
-        mapping, dof_handler, QGauss<dim>(quad_order), mass_matrix, &rho_f);
-    }
-
+    // Initialize all vectors
     old_velocity.reinit(dof_handler.n_dofs());
     velocity.reinit(dof_handler.n_dofs());
 
@@ -293,6 +325,7 @@ namespace Linear_Elasticity
               << "\n\t Number of degrees of freedom: " << dof_handler.n_dofs()
               << std::endl;
 
+    // Define alias for time dependent variables as described above
     state_variables = {
       &old_velocity, &velocity, &old_displacement, &displacement, &old_stress};
 
@@ -300,6 +333,7 @@ namespace Linear_Elasticity
     // TODO: Check, if initial conditions should be set at the beginning
     old_stress = 0.0;
   }
+
 
 
   template <int dim>
@@ -321,7 +355,6 @@ namespace Linear_Elasticity
 
     std::vector<types::global_dof_index> local_dof_indices(dofs_per_cell);
 
-
     std::vector<double> lambda_values(n_q_points);
     std::vector<double> mu_values(n_q_points);
 
@@ -329,20 +362,21 @@ namespace Linear_Elasticity
     Functions::ConstantFunction<dim> lambda(parameters.lambda),
       mu(parameters.mu);
 
-
+    // Assemble the stiffness matrix according to a linear material law using
+    // the lame paramters
     for (const auto &cell : dof_handler.active_cell_iterators())
       {
         cell_matrix = 0;
 
         fe_values.reinit(cell);
 
-        // next we get the values of the coefficients at the quadrature
+        // Next we get the values of the coefficients at the quadrature
         // points.
         lambda.value_list(fe_values.get_quadrature_points(), lambda_values);
         mu.value_list(fe_values.get_quadrature_points(), mu_values);
 
 
-        // then assemble the entries of the local stiffness matrix
+        // Then assemble the entries of the local stiffness matrix
         for (unsigned int i = 0; i < dofs_per_cell; ++i)
           {
             const unsigned int component_i =
@@ -380,7 +414,7 @@ namespace Linear_Elasticity
           }
 
 
-        // the transfer from local degrees of freedom into the global matrix
+        // The transfer from local degrees of freedom into the global matrix
         cell->get_dof_indices(local_dof_indices);
         for (unsigned int i = 0; i < dofs_per_cell; ++i)
           {
@@ -391,7 +425,17 @@ namespace Linear_Elasticity
           }
       }
 
-    // To save the system_matrix
+
+    // Here, we use the MatrixCreator to create a mass matrix, which is constant
+    // through the whole simulation
+    {
+      Functions::ConstantFunction<dim> rho_f(parameters.rho);
+
+      MatrixCreator::create_mass_matrix(
+        mapping, dof_handler, QGauss<dim>(quad_order), mass_matrix, &rho_f);
+    }
+
+    // Then, we save the system_matrix, which is needed every timestep
     stepping_matrix.copy_from(stiffness_matrix);
 
     stepping_matrix *= time.get_delta_t() * time.get_delta_t() *
@@ -408,10 +452,10 @@ namespace Linear_Elasticity
         for (uint d = 0; d < dim; ++d)
           bf_vector[d] = parameters.rho * parameters.body_force[d];
 
-        // create a constant function object
+        // Create a constant function object
         Functions::ConstantFunction<dim> bf_function(bf_vector);
 
-        // create the contribution to the right-hand side vector
+        // Create the contribution to the right-hand side vector
         VectorTools::create_right_hand_side(mapping,
                                             dof_handler,
                                             QGauss<dim>(quad_order),
@@ -421,15 +465,17 @@ namespace Linear_Elasticity
   }
 
 
+  // Process RHS assembly, which is the coupling data (stress) in this case
   template <int dim>
   void
   ElastoDynamics<dim>::assemble_rhs()
   {
     timer.enter_subsection("Assemble rhs");
 
+    // Initialize all objects as usual
     system_rhs = 0.0;
 
-    // quadrature formula for integration over faces (dim-1)
+    // Quadrature formula for integration over faces (dim-1)
     QGauss<dim - 1> face_quadrature_formula(quad_order);
 
     FEFaceValues<dim> fe_face_values(mapping,
@@ -453,14 +499,15 @@ namespace Linear_Elasticity
       {
         cell_rhs = 0;
 
-        // assembling the right-hand side force vector each timestep
-        // by applying contributions from the coupling interface
+        // Assemblw the right-hand side force vector each timestep
+        // by applying contributions only on the coupling interface
         for (const auto &face : cell->face_iterators())
           if (face->at_boundary() == true &&
               face->boundary_id() == interface_boundary_id)
             {
               fe_face_values.reinit(cell, face);
-              // Extract from global stress vector
+              // Extract relevant data from the global stress vector by using
+              // 'get_function_values()'
               // In contrast to the nonlinear solver, no pull back is performed.
               // The equilibrium is stated in reference configuration, but only
               // valid for very small deformations
@@ -479,7 +526,7 @@ namespace Linear_Elasticity
                   }
             }
 
-        // local dofs to global
+        // Local dofs to global
         cell->get_dof_indices(local_dof_indices);
         for (unsigned int i = 0; i < dofs_per_cell; ++i)
           {
@@ -487,15 +534,15 @@ namespace Linear_Elasticity
           }
       }
 
-    // update variables time dependent variables
+    // Update time dependent variables related to the previous time step t_n
     old_velocity     = velocity;
     old_displacement = displacement;
 
-    // add contribution of gravitational forces
+    // Add contribution of body forces, if necessary
     if (body_force_enabled)
       system_rhs.add(1, body_force_vector);
 
-    // assemble global RHS:
+    // Assemble global RHS:
     // RHS=(M-theta*(1-theta)*delta_t^2*K)*V_n - delta_t*K* D_n +
     // delta_t*theta*F_n+1 + delta_t*(1-theta)*F_n
 
@@ -522,12 +569,12 @@ namespace Linear_Elasticity
 
     hanging_node_constraints.condense(system_rhs);
 
-    // copy the system_matrix every timestep, since applying the BC deletes
+    // Copy the system_matrix every timestep, since applying the BC deletes
     // certain rows and columns
     system_matrix = 0.0;
     system_matrix.copy_from(stepping_matrix);
 
-    // set Dirichlet BC
+    // Set Dirichlet BCs:
     // clamped in all directions
     std::map<types::global_dof_index, double> boundary_values;
     VectorTools::interpolate_boundary_values(dof_handler,
@@ -554,6 +601,8 @@ namespace Linear_Elasticity
     timer.leave_subsection("Assemble rhs");
   }
 
+
+
   template <int dim>
   void
   ElastoDynamics<dim>::solve()
@@ -563,6 +612,8 @@ namespace Linear_Elasticity
     uint   lin_it  = 1;
     double lin_res = 0.0;
 
+    // Solve the linear system either using an iterative CG solver with SSOR or
+    // a direct solver using UMFPACK
     if (parameters.type_lin == "CG")
       {
         std::cout << "\t CG solver: " << std::endl;
@@ -604,6 +655,8 @@ namespace Linear_Elasticity
     timer.leave_subsection("Solve system");
   }
 
+
+
   template <int dim>
   void
   ElastoDynamics<dim>::update_displacement()
@@ -612,6 +665,7 @@ namespace Linear_Elasticity
     displacement.add(time.get_delta_t() * parameters.theta, velocity);
     displacement.add(time.get_delta_t() * (1 - parameters.theta), old_velocity);
   }
+
 
 
   template <int dim>
@@ -628,6 +682,8 @@ namespace Linear_Elasticity
 
     data_out.attach_dof_handler(dof_handler);
 
+    // The postprocessor class computes straines and passes the displacement to
+    // the output
     Postprocessor<dim> postprocessor;
     data_out.add_data_vector(displacement, postprocessor);
 
@@ -639,7 +695,7 @@ namespace Linear_Elasticity
                            parameters.poly_degree,
                            DataOut<dim>::curved_boundary);
 
-    // check, if the output directory exists
+    // Check, if the output directory exists
     std::ifstream output_directory(case_path + "dealii_output");
     Assert(
       output_directory,
@@ -648,7 +704,7 @@ namespace Linear_Elasticity
         "By default, this program stores result files in a directory called dealii_output. "
         "This needs to be located in your case directory, where the parameter file is located as well."));
 
-    // store all files in a seperate folder called dealii_ouput
+    // Store all files in a seperate folder called dealii_ouput
     std::ofstream output(
       case_path + "dealii_output/solution-" +
       std::to_string(time.get_timestep() / parameters.output_interval) +
@@ -668,39 +724,69 @@ namespace Linear_Elasticity
   void
   ElastoDynamics<dim>::run()
   {
+    // In the beginning, we create the mesh and set up the data structures
     make_grid();
     setup_system();
     output_results();
-
     assemble_system();
+
+    // Then, we initialize preCICE i.e. we pass our mesh and coupling
+    // information to preCICE
     adapter.initialize(dof_handler, displacement, stress);
 
+    // Then, we start the time loop. The loop itself is steered by preCICE. This
+    // line replaces the usual 'while( time < end_time)'
     while (adapter.precice.isCouplingOngoing())
       {
+        // In case of an implicit coupling, we need to store time dependent
+        // data, in order to reload it later. The decision, whether it is
+        // necessary to store the data is handled by preCICE as well
         adapter.save_current_state_if_required(state_variables, time);
 
+        // Afterwards, we start the actual time step computation
         time.increment();
 
         std::cout << std::endl
-                  << "Timestep " << time.get_timestep() << " @ "
+                  << "Timestep " << time.get_timestep() << " @ " << std::fixed
                   << time.current() << "s" << std::endl;
 
+        // Assemble the time dependent contribution obtained from the Fluid
+        // participant
         assemble_rhs();
 
+        // ...and solver the system
         solve();
 
+        // Update time dependent data according to the theta-scheme
         update_displacement();
 
+        // Then, we exchange data with other participants. Most of the work is
+        // done in the adapter: We just need to pass both data vectors with
+        // coupling data to the adapter. In case of FSI, 'displacement' is the
+        // data we calculate and pass to preCICE and 'stress' is the (global)
+        // vector filled by preCICE/ the Fluid participant.
+        // Depending on the coupling scheme, we need to wait here for other
+        // participant to finish their time step. Therefore, we measure the
+        // timings around this functionality
         timer.enter_subsection("Advance adapter");
         adapter.advance(displacement, stress, time.get_delta_t());
         timer.leave_subsection("Advance adapter");
 
+        // Next, we reload the data we have previosuly stored in the beginning
+        // of the time loop. This is only relevant for implicit couplings and
+        // preCICE steeres the reloading depending on the specific
+        // configuration.
         adapter.reload_old_state_if_required(state_variables, time);
 
+        // At last, we ask preCICE, whether this coupling time step (= time
+        // window in preCICE terms) is finished and write the result files
         if (adapter.precice.isTimeWindowComplete() &&
             time.get_timestep() % parameters.output_interval == 0)
           output_results();
       }
+
+    // After the time loop, we finalize the coupling i.e. terminate
+    // communication etc.
     adapter.precice.finalize();
   }
 } // namespace Linear_Elasticity
