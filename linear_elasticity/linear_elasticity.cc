@@ -89,7 +89,7 @@ namespace Linear_Elasticity
     output_results() const;
 
     // Paramter class parsing all user specific input parameters
-    Parameters::AllParameters parameters;
+    const Parameters::AllParameters parameters;
 
     // Boundary IDs, reserved for the respectve application
     unsigned int       clamped_mesh_id;

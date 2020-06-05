@@ -202,9 +202,6 @@ namespace Nonlinear_Elasticity
 
     Triangulation<dim> triangulation;
 
-    Adapter::Time time;
-    TimerOutput   timer;
-
     CellDataStorage<typename Triangulation<dim>::cell_iterator,
                     PointHistory<dim, NumberType>>
       quadrature_point_history;
@@ -279,7 +276,14 @@ namespace Nonlinear_Elasticity
     // Adapter
     BlockVector<double> external_stress;
 
-    // Adapter object, which does all work in terms of coupling with preCICE
+    // In order to measure some timings
+    mutable TimerOutput   timer;
+
+    // The main adapter objects: The time class keeps track of the current time
+    // and time steps. The Adapter class includes all functionalities for
+    // coupling via preCICE. Look at the documentation of the class for more
+    // information.
+    Adapter::Time time;
     Adapter::Adapter<dim, BlockVector<double>, Parameters::AllParameters>
       adapter;
 
@@ -333,8 +337,6 @@ namespace Nonlinear_Elasticity
     , vol_reference(0.0)
     , vol_current(0.0)
     , triangulation(Triangulation<dim>::maximum_smoothing)
-    , time(parameters.end_time, parameters.delta_t)
-    , timer(std::cout, TimerOutput::summary, TimerOutput::wall_times)
     , degree(parameters.poly_degree)
     , fe(FE_Q<dim>(parameters.poly_degree), dim)
     , // displacement
@@ -348,6 +350,8 @@ namespace Nonlinear_Elasticity
     , n_q_points_f(qf_face.size())
     , boundary_interface_id(7)
     , case_path(case_path)
+    , timer(std::cout, TimerOutput::summary, TimerOutput::wall_times)
+    , time(parameters.end_time, parameters.delta_t)
     , adapter(parameters, boundary_interface_id)
   {}
 
@@ -1422,7 +1426,7 @@ namespace Nonlinear_Elasticity
           lin_res = 0.0;
         }
       else
-        Assert(solver_type == "Direct" || solver_type == "CG",
+        Assert(parameters.type_lin == "Direct" || parameters.type_lin == "CG",
                ExcMessage("Linear solver type not implemented"));
 
       timer.leave_subsection();
