@@ -3,14 +3,14 @@
 
 #include <deal.II/base/parameter_handler.h>
 
-namespace Adapter
+namespace Nonlinear_Elasticity
 {
   using namespace dealii;
 
   /**
    * This class declares all parameters, which can be specified in the parameter
    * file. The subsection abut preCICE configurations is directly interlinked
-   * to the CouplingFunctions class.
+   * to the Adapter class.
    */
   namespace Parameters
   {
@@ -403,6 +403,6 @@ namespace Adapter
       PreciceAdapterConfiguration::parse_parameters(prm);
     }
   } // namespace Parameters
-} // namespace Adapter
+} // namespace Nonlinear_Elasticity
 
 #endif

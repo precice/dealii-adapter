@@ -47,14 +47,14 @@
 #include <fstream>
 #include <iostream>
 
+#include "../adapter/adapter.h"
+#include "../adapter/time.h"
 #include "include/compressible_neo_hook_material.h"
-#include "include/coupling_functions.h"
 #include "include/parameter_handling.h"
 #include "include/postprocessor.h"
-#include "include/time.h"
 #include "precice/SolverInterface.hpp"
 
-namespace Neo_Hook_Solid
+namespace Nonlinear_Elasticity
 {
   using namespace dealii;
 
@@ -73,7 +73,7 @@ namespace Neo_Hook_Solid
     {}
 
     void
-    setup_lqp(const Adapter::Parameters::AllParameters &parameters)
+    setup_lqp(const Parameters::AllParameters &parameters)
     {
       material.reset(
         new Material_Compressible_Neo_Hook_One_Field<dim, NumberType>(
@@ -195,15 +195,12 @@ namespace Neo_Hook_Solid
     void
     output_results() const;
 
-    const Adapter::Parameters::AllParameters parameters;
+    const Parameters::AllParameters parameters;
 
     double vol_reference;
     double vol_current;
 
     Triangulation<dim> triangulation;
-
-    Adapter::Time time;
-    TimerOutput   timer;
 
     CellDataStorage<typename Triangulation<dim>::cell_iterator,
                     PointHistory<dim, NumberType>>
@@ -233,6 +230,9 @@ namespace Neo_Hook_Solid
     const QGauss<dim - 1> qf_face;
     const unsigned int    n_q_points;
     const unsigned int    n_q_points_f;
+    // Interface ID, which is later assigned to the mesh region for coupling
+    // It is chosen arbotrarily
+    const unsigned int boundary_interface_id;
 
     // Newmark parameters
     // Coefficients, which are needed for time dependencies
@@ -267,22 +267,28 @@ namespace Neo_Hook_Solid
     BlockVector<double>       acceleration_old;
 
     // Alias to collect all time dependent variables in a single vector
-    // This is directly passed to the CouplingFunctions routine in order to
+    // This is directly passed to the Adapter routine in order to
     // store these variables for implicit couplings.
     std::vector<BlockVector<double> *> state_variables;
 
     // Global vector, which keeps all contributions of the Fluid participant
     // i.e. stress data for assembly. This vector is filled properly in the
-    // CouplingFunctions
+    // Adapter
     BlockVector<double> external_stress;
 
-    // Adapter object, which does all work in terms of coupling with preCICE
-    Adapter::PreciceDealCoupling::CouplingFunctions<dim, BlockVector<double>>
-      coupling_functions;
+    // In order to measure some timings
+    mutable TimerOutput   timer;
+
+    // The main adapter objects: The time class keeps track of the current time
+    // and time steps. The Adapter class includes all functionalities for
+    // coupling via preCICE. Look at the documentation of the class for more
+    // information.
+    Adapter::Time time;
+    Adapter::Adapter<dim, BlockVector<double>, Parameters::AllParameters>
+      adapter;
 
     // Then define a number of variables to store norms and update norms and
     // normalisation factors.
-
     struct Errors
     {
       Errors()
@@ -327,13 +333,10 @@ namespace Neo_Hook_Solid
   // Constructor initializes member variables and reads the parameter file
   template <int dim, typename NumberType>
   Solid<dim, NumberType>::Solid(const std::string &case_path)
-    : parameters(
-        Adapter::Parameters::AllParameters(case_path + "parameters.prm"))
+    : parameters(Parameters::AllParameters(case_path + "parameters.prm"))
     , vol_reference(0.0)
     , vol_current(0.0)
     , triangulation(Triangulation<dim>::maximum_smoothing)
-    , time(parameters.end_time, parameters.delta_t)
-    , timer(std::cout, TimerOutput::summary, TimerOutput::wall_times)
     , degree(parameters.poly_degree)
     , fe(FE_Q<dim>(parameters.poly_degree), dim)
     , // displacement
@@ -345,8 +348,11 @@ namespace Neo_Hook_Solid
     , qf_face(parameters.poly_degree + 2)
     , n_q_points(qf_cell.size())
     , n_q_points_f(qf_face.size())
+    , boundary_interface_id(7)
     , case_path(case_path)
-    , coupling_functions(parameters)
+    , timer(std::cout, TimerOutput::summary, TimerOutput::wall_times)
+    , time(parameters.end_time, parameters.delta_t)
+    , adapter(parameters, boundary_interface_id)
   {}
 
   // Destructor clears the DoFHandler
@@ -366,26 +372,23 @@ namespace Neo_Hook_Solid
     make_grid();
     system_setup();
     output_results();
-    time.increment();
 
     // Initialize preCICE before starting the time loop
     // Here, all information concerning the coupling is passed to preCICE
-    coupling_functions.initialize_precice(dof_handler_ref,
-                                          total_displacement,
-                                          external_stress);
-
+    adapter.initialize(dof_handler_ref, total_displacement, external_stress);
 
     BlockVector<NumberType> solution_delta(dofs_per_block);
 
     // Start the time loop. Steering is done by preCICE itself
-    while (coupling_functions.precice.isCouplingOngoing())
+    while (adapter.precice.isCouplingOngoing())
       {
-        solution_delta = 0.0;
-
         // If we have an implicit coupling, we need to save data before
         // advancing in time in order to restore it later
-        coupling_functions.save_current_state_if_required(state_variables,
-                                                          time);
+        adapter.save_current_state_if_required(state_variables, time);
+
+        solution_delta = 0.0;
+
+        time.increment();
 
         // Solve a the system using the Newton-Raphson algorithm
         solve_nonlinear_timestep(solution_delta);
@@ -396,24 +399,29 @@ namespace Neo_Hook_Solid
         update_velocity(solution_delta);
         update_old_variables();
 
+        // We are interested in some timings. Here, we measure, how much time we
+        // spent through coupling. In case of a parallel coupling schemes, we
+        // can directly see the load balancing
+        timer.enter_subsection("Advance adapter");
         // ... and pass the coupling data to preCICE, in this case displacement
         // (write data) and stress (read data)
-        coupling_functions.advance_precice(total_displacement,
-                                           external_stress,
-                                           time.get_delta_t());
-        time.increment();
+        adapter.advance(total_displacement,
+                        external_stress,
+                        time.get_delta_t());
+
+        timer.leave_subsection("Advance adapter");
 
         // Restore the old state, if our implicit time step is not yet converged
-        coupling_functions.reload_old_state_if_required(state_variables, time);
+        adapter.reload_old_state_if_required(state_variables, time);
 
         // ...and output results, if the coupling time step has converged
-        if (coupling_functions.precice.isTimeWindowComplete() &&
+        if (adapter.precice.isTimeWindowComplete() &&
             time.get_timestep() % parameters.output_interval == 0)
           output_results();
       }
 
     // finalizes preCICE and finishes the simulation
-    coupling_functions.precice.finalize();
+    adapter.precice.finalize();
   }
 
 
@@ -485,12 +493,11 @@ namespace Neo_Hook_Solid
 
     // Cell iterator for boundary conditions
 
-    // The boundary ID for Neumann BCs is stored in the CouplingFunctions to
-    // avoid errors. Hence, we need to call it from there.
+    // The boundary ID for Neumann BCs is stored globally to
+    // avoid errors.
     // Note, the selected IDs are arbitrarily chosen. They just need to be
     // unique
-    const unsigned int neumann_boundary_id =
-      coupling_functions.deal_boundary_interface_id;
+    const unsigned int neumann_boundary_id = boundary_interface_id;
     // ...and for clamped boundaries. The ID needs to be consistent with the one
     // set in make_constarints. We decided to set one globally, which is reused
     // in make_constraints
@@ -521,6 +528,8 @@ namespace Neo_Hook_Solid
       clamped_id != neumann_boundary_id,
       ExcMessage(
         "Boundary IDs must not be the same, for different boundary types."));
+    Assert(boundary_interface_id == adapter.deal_boundary_interface_id,
+           ExcMessage("Wrong interface ID in the Adapter."));
 
     vol_reference = GridTools::volume(triangulation);
     vol_current   = vol_reference;
@@ -639,8 +648,8 @@ namespace Neo_Hook_Solid
     BlockVector<double> &solution_delta)
   {
     std::cout << std::endl
-              << "Timestep " << time.get_timestep() << " @ " << time.current()
-              << "s" << std::endl;
+              << "Timestep " << time.get_timestep() << " @ " << std::fixed
+              << time.current() << "s" << std::endl;
 
     BlockVector<double> newton_update(dofs_per_block);
 
@@ -1024,8 +1033,7 @@ namespace Neo_Hook_Solid
       const FESystem<dim> &fe                = data.solid->fe;
       const unsigned int & u_dof             = data.solid->u_dof;
       const FEValuesExtractors::Vector &u_fe = data.solid->u_fe;
-      const unsigned int &              interf_id =
-        data.solid->coupling_functions.deal_boundary_interface_id;
+      const unsigned int &interf_id = data.solid->boundary_interface_id;
 
       for (const auto &face : cell->face_iterators())
         if (face->at_boundary() == true && face->boundary_id() == interf_id)
@@ -1418,7 +1426,8 @@ namespace Neo_Hook_Solid
           lin_res = 0.0;
         }
       else
-        Assert(false, ExcMessage("Linear solver type not implemented"));
+        Assert(parameters.type_lin == "Direct" || parameters.type_lin == "CG",
+               ExcMessage("Linear solver type not implemented"));
 
       timer.leave_subsection();
     }
@@ -1434,6 +1443,7 @@ namespace Neo_Hook_Solid
   void
   Solid<dim, NumberType>::output_results() const
   {
+    timer.enter_subsection("Output results");
     DataOut<dim> data_out;
 
     // Note: There is at least paraView v 5.5 needed to visualize this output
@@ -1452,7 +1462,7 @@ namespace Neo_Hook_Solid
       soln(i) = total_displacement(i);
     MappingQEulerian<dim> q_mapping(degree, dof_handler_ref, soln);
 
-    data_out.build_patches(q_mapping, degree, DataOut<dim>::curved_inner_cells);
+    data_out.build_patches(q_mapping, degree, DataOut<dim>::curved_boundary);
 
     std::ostringstream filename;
     filename << case_path << "solution-"
@@ -1460,14 +1470,15 @@ namespace Neo_Hook_Solid
 
     std::ofstream output(filename.str().c_str());
     data_out.write_vtk(output);
+    timer.leave_subsection("Output results");
   }
 
-} // namespace Neo_Hook_Solid
+} // namespace Nonlinear_Elasticity
 
 int
 main(int argc, char **argv)
 {
-  using namespace Neo_Hook_Solid;
+  using namespace Nonlinear_Elasticity;
   using namespace dealii;
 
   Utilities::MPI::MPI_InitFinalize mpi_initialization(argc, argv, 1);

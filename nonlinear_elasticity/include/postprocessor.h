@@ -5,14 +5,14 @@
 
 // Calculate Strains and pass displacement to the dof_handler
 // TODO: Strains are symmetric. Currently all tensor components are processed
-namespace Neo_Hook_Solid
+namespace Nonlinear_Elasticity
 {
   using namespace dealii;
   /**
    *  The Postprocessor class is used to handle the generation of output in the
-   *  main class. As opposed to the original work, the strain is additionally
-   *  to the dislpacement calculated and printed to the output file. Therefore,
-   *  the deal.II DataPostprocessor interface is used.
+   *  main class. Here, strains are computed and processed with the displacement
+   *  intto the output file. Therefore, the deal.II DataPostprocessor interface
+   *  is used.
    */
   template <int dim>
   class Postprocessor : public DataPostprocessor<dim>
@@ -121,5 +121,5 @@ namespace Neo_Hook_Solid
     return update_values | update_gradients;
   }
 
-} // namespace Neo_Hook_Solid
+} // namespace Nonlinear_Elasticity
 #endif // POSTPROCESSOR_H

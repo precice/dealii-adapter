@@ -3,7 +3,7 @@
 
 #include <deal.II/physics/elasticity/standard_tensors.h>
 
-namespace Neo_Hook_Solid
+namespace Nonlinear_Elasticity
 {
   using namespace dealii;
   /**
@@ -138,5 +138,5 @@ namespace Neo_Hook_Solid
       return SymmetricTensor<4, dim>();
     }
   };
-} // namespace Neo_Hook_Solid
+} // namespace Nonlinear_Elasticity
 #endif // COMPRESSIBLE_NEO_HOOK_MATERIAL_H
