@@ -277,7 +277,7 @@ namespace Nonlinear_Elasticity
     BlockVector<double> external_stress;
 
     // In order to measure some timings
-    mutable TimerOutput   timer;
+    mutable TimerOutput timer;
 
     // The main adapter objects: The time class keeps track of the current time
     // and time steps. The Adapter class includes all functionalities for
@@ -333,7 +333,8 @@ namespace Nonlinear_Elasticity
   // Constructor initializes member variables and reads the parameter file
   template <int dim, typename NumberType>
   Solid<dim, NumberType>::Solid(const std::string &case_path)
-    : parameters(Parameters::AllParameters(case_path + "parameters.prm"))
+    : parameters(
+        Parameters::AllParameters(case_path + "nonlinear_elasticity.prm"))
     , vol_reference(0.0)
     , vol_current(0.0)
     , triangulation(Triangulation<dim>::maximum_smoothing)
@@ -1493,7 +1494,7 @@ main(int argc, char **argv)
       if (argc > 1)
         parameter_file = argv[1];
       else
-        parameter_file = "parameters.prm";
+        parameter_file = "nonlinear_elasticity.prm";
 
       // Extract case path for the output directory
       size_t      pos = parameter_file.find_last_of("/");

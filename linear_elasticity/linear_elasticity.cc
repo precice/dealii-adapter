@@ -148,7 +148,7 @@ namespace Linear_Elasticity
   // Constructor
   template <int dim>
   ElastoDynamics<dim>::ElastoDynamics(const std::string &case_path)
-    : parameters(case_path + "parameters.prm")
+    : parameters(case_path + "linear_elasticity.prm")
     , interface_boundary_id(6)
     , dof_handler(triangulation)
     , fe(FE_Q<dim>(parameters.poly_degree), dim)
@@ -805,7 +805,7 @@ main(int argc, char **argv)
       if (argc > 1)
         parameter_file = argv[1];
       else
-        parameter_file = "parameters.prm";
+        parameter_file = "linear_elasticity.prm";
 
       // Extract case path for the output directory
       size_t      pos = parameter_file.find_last_of("/");
