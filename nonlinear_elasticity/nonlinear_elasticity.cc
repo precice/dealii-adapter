@@ -456,8 +456,8 @@ namespace Nonlinear_Elasticity
         id_flap_short_bottom = 2; // y direction
         id_flap_short_top    = 3;
 
-        n_x = 5;
-        n_y = 30;
+        n_x = 3;
+        n_y = 18;
       }
     else // FSI3, don't use condition to avoid wmaybe unitialized warning
       {
