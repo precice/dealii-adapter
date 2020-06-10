@@ -52,7 +52,6 @@
 #include "include/compressible_neo_hook_material.h"
 #include "include/parameter_handling.h"
 #include "include/postprocessor.h"
-#include "precice/SolverInterface.hpp"
 
 namespace Nonlinear_Elasticity
 {

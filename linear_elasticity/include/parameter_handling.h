@@ -182,7 +182,7 @@ namespace Linear_Elasticity
         prm.declare_entry("Solver type",
                           "Direct",
                           Patterns::Selection("CG|Direct"),
-                          "Type of solver used to solve the linear system");
+                          "Linear solver: CG or Direct");
 
         prm.declare_entry("Residual",
                           "1e-6",

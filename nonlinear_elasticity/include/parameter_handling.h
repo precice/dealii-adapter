@@ -96,7 +96,7 @@ namespace Nonlinear_Elasticity
         prm.declare_entry("Solver type",
                           "CG",
                           Patterns::Selection("CG|Direct"),
-                          "Type of solver used to solve the linear system");
+                          "Linear solver: CG or Direct");
 
         prm.declare_entry("Residual",
                           "1e-6",

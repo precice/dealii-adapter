@@ -39,7 +39,6 @@
 #include "../adapter/time.h"
 #include "include/parameter_handling.h"
 #include "include/postprocessor.h"
-#include "precice/SolverInterface.hpp"
 
 // The Linear_Elasticity case includes a linear elastic material with a one-step
 // theta time integration

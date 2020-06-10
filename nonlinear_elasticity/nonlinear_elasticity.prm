@@ -45,7 +45,7 @@ subsection Linear solver
   # Linear solver residual (scaled by residual norm)
   set Residual                  = 1e-6
 
-  # Type of solver used to solve the linear system
+  # Linear solver: CG or Direct
   set Solver type               = Direct
 end
 
