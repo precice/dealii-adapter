@@ -5,8 +5,8 @@
 
 Coupled structural solvers written with the C++ finite element library deal.II:
 
-- `linear_elasticity` contains a linear-elastic solver based on the step-8 tutorial program of deal.II
-- `nonlinear_elasticity` contains a nonlinear elastic solver, which builds on previous work of Jean-Paul Pelteret and Andrew McBride in their deal.II code gallery program 'Quasi-Static Finite-Strain Compressible Elasticity.' This solver supports shared-memory parallelization.
+- `linear_elasticity` contains a linear-elastic solver based on the [step-8 tutorial program](https://www.dealii.org/9.2.0/doxygen/deal.II/step_8.html) of deal.II
+- `nonlinear_elasticity` contains a nonlinear elastic solver, which builds on previous work of Jean-Paul Pelteret and Andrew McBride in their deal.II code gallery program '[Quasi-Static Finite-Strain Compressible Elasticity](https://www.dealii.org/9.0.0/doxygen/deal.II/code_gallery_Quasi_static_Finite_strain_Compressible_Elasticity.html).' This solver supports shared-memory parallelization.
 
 Applied coupling functionalities have been separated and can be found in the `adapter` directory.
 
