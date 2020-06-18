@@ -226,11 +226,9 @@ namespace Linear_Elasticity
 
     // Vector of dim values denoting the number of cells to generate in that
     // direction
-    std::vector<unsigned int> repetitions(dim);
-    repetitions[0] = n_x;
-    repetitions[1] = n_y;
-    if (dim == 3)
-      repetitions[2] = n_z;
+    const std::vector<unsigned int> repetitions =
+      dim == 2 ? std::vector<unsigned int>({n_x, n_y}) :
+                 std::vector<unsigned int>({n_x, n_y, n_z});
 
     GridGenerator::subdivided_hyper_rectangle(triangulation,
                                               repetitions,

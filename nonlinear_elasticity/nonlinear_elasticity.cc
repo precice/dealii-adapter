@@ -249,7 +249,8 @@ namespace Nonlinear_Elasticity
     const Tensor<1, 3, double> body_force = parameters.body_force;
 
     // Clamped boundary ID to be used consistently
-    const unsigned int clamped_boundary_id = 1;
+    const unsigned int clamped_boundary_id          = 1;
+    const unsigned int out_of_plane_clamped_mesh_id = 8;
 
     // ..and store the directory, in order to output the result files there
     const std::string case_path;
@@ -441,7 +442,7 @@ namespace Nonlinear_Elasticity
 
     Point<dim>   point_bottom, point_tip;
     unsigned int id_flap_long_bottom, id_flap_long_top, id_flap_short_bottom,
-      id_flap_short_top, n_x, n_y;
+      id_flap_short_top, n_x, n_y, n_z;
 
     // Assertion is done via a input pattern in the parameter class
     if (testcase == "PF")
@@ -458,6 +459,7 @@ namespace Nonlinear_Elasticity
 
         n_x = 3;
         n_y = 18;
+        n_z = 1;
       }
     else // FSI3, don't use condition to avoid wmaybe unitialized warning
       {
@@ -474,9 +476,16 @@ namespace Nonlinear_Elasticity
 
         n_x = 25;
         n_y = 2;
+        n_z = 1;
       }
 
-    std::vector<unsigned int> repetitions({n_x, n_y});
+    // Same for both scenarios, only relevant for quasi-2D
+    const unsigned int id_flap_out_of_plane_bottom = 4; // z direction
+    const unsigned int id_flap_out_of_plane_top    = 5;
+
+    const std::vector<unsigned int> repetitions =
+      dim == 2 ? std::vector<unsigned int>({n_x, n_y}) :
+                 std::vector<unsigned int>({n_x, n_y, n_z});
 
     // Generate the mesh
     GridGenerator::subdivided_hyper_rectangle(triangulation,
@@ -517,6 +526,11 @@ namespace Nonlinear_Elasticity
                      face->boundary_id() == id_flap_long_top ||
                      face->boundary_id() == id_flap_short_top)
               face->set_boundary_id(neumann_boundary_id);
+            // Boundaries clamped out-of-plane (z) direction
+            else if (face->boundary_id() == id_flap_out_of_plane_bottom ||
+                     face->boundary_id() == id_flap_out_of_plane_top)
+              face->set_boundary_id(out_of_plane_clamped_mesh_id);
+
             else
               AssertThrow(false,
                           ExcMessage("Unknown boundary id, did "
@@ -526,6 +540,10 @@ namespace Nonlinear_Elasticity
     // Check, whether the given IDs are mutually exclusive
     Assert(
       clamped_id != neumann_boundary_id,
+      ExcMessage(
+        "Boundary IDs must not be the same, for different boundary types."));
+    Assert(
+      boundary_interface_id != out_of_plane_clamped_mesh_id,
       ExcMessage(
         "Boundary IDs must not be the same, for different boundary types."));
     Assert(boundary_interface_id == adapter.deal_boundary_interface_id,
@@ -1354,7 +1372,7 @@ namespace Nonlinear_Elasticity
       {
         // The FEValuesExtractors allow to fix only a certain direction, in this
         // case the z-direction
-        const int                        boundary_id = clamped_boundary_id;
+        const unsigned int boundary_id = out_of_plane_clamped_mesh_id;
         const FEValuesExtractors::Scalar z_displacement(2);
 
         if (apply_dirichlet_bc == true)
@@ -1487,7 +1505,7 @@ main(int argc, char **argv)
     {
       deallog.depth_console(0);
 
-      constexpr unsigned int dimension = 2;
+      constexpr unsigned int dimension = 3;
 
       std::string parameter_file;
       if (argc > 1)
