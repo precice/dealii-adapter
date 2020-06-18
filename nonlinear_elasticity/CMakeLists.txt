@@ -9,6 +9,12 @@ SET(TARGET_SRC
   ${TARGET}.cc
   )
 
+# To make the dimension switch available via cmake
+IF (NOT DEFINED DIM)
+        SET(DIM 2)
+ENDIF()
+ADD_DEFINITIONS(-DDIM=${DIM})
+
 # To cleanup result files
 SET(CLEAN_UP_FILES
   # a custom list of globs, e.g. *.log *.vtk

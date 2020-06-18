@@ -1505,8 +1505,6 @@ main(int argc, char **argv)
     {
       deallog.depth_console(0);
 
-      constexpr unsigned int dimension = 3;
-
       std::string parameter_file;
       if (argc > 1)
         parameter_file = argv[1];
@@ -1518,7 +1516,8 @@ main(int argc, char **argv)
       std::string case_path =
         std::string::npos == pos ? "" : parameter_file.substr(0, pos + 1);
 
-      Solid<dimension> solid(case_path);
+      // Dimension is determinded via cmake -DDIM
+      Solid<DIM> solid(case_path);
       solid.run();
     }
   catch (std::exception &exc)
