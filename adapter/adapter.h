@@ -405,13 +405,13 @@ namespace Adapter
 
     for (int i = 0; i < n_interface_nodes; ++i)
       {
-        write_data[2 * i]       = deal_to_precice[*x_comp];
-        write_data[(2 * i) + 1] = deal_to_precice[*y_comp];
+        write_data[dim * i]       = deal_to_precice[*x_comp];
+        write_data[(dim * i) + 1] = deal_to_precice[*y_comp];
         ++x_comp;
         ++y_comp;
         if (dim == 3)
           {
-            write_data[(2 * i) + 2] = deal_to_precice[*z_comp];
+            write_data[(dim * i) + 2] = deal_to_precice[*z_comp];
             ++z_comp;
           }
       }
@@ -431,13 +431,13 @@ namespace Adapter
 
     for (int i = 0; i < n_interface_nodes; ++i)
       {
-        precice_to_deal[*x_comp] = read_data[2 * i];
-        precice_to_deal[*y_comp] = read_data[(2 * i) + 1];
+        precice_to_deal[*x_comp] = read_data[dim * i];
+        precice_to_deal[*y_comp] = read_data[(dim * i) + 1];
         ++x_comp;
         ++y_comp;
         if (dim == 3)
           {
-            precice_to_deal[*z_comp] = read_data[(2 * i) + 2];
+            precice_to_deal[*z_comp] = read_data[(dim * i) + 2];
             ++z_comp;
           }
       }
