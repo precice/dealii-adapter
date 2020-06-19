@@ -15,6 +15,14 @@ IF (NOT DEFINED DIM)
 ENDIF()
 ADD_DEFINITIONS(-DDIM=${DIM})
 
+# Change default build type for tutorial cases
+IF(NOT CMAKE_BUILD_TYPE)
+  SET(CMAKE_BUILD_TYPE "Release" CACHE STRING
+      "Choose the type of build, options are: Debug Release"
+      FORCE)
+ENDIF(NOT CMAKE_BUILD_TYPE)
+MESSAGE(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
+
 # To cleanup result files
 SET(CLEAN_UP_FILES
   # a custom list of globs, e.g. *.log *.vtk
