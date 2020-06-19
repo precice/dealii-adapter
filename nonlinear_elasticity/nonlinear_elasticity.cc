@@ -573,6 +573,7 @@ namespace Nonlinear_Elasticity
     dofs_per_block =
       DoFTools::count_dofs_per_fe_block(dof_handler_ref, block_component);
 
+    std::cout.imbue(std::locale(""));
     std::cout << "Triangulation:"
               << "\n\t Number of active cells: "
               << triangulation.n_active_cells()

@@ -315,6 +315,7 @@ namespace Linear_Elasticity
 
     body_force_vector.reinit(dof_handler.n_dofs());
 
+    std::cout.imbue(std::locale(""));
     std::cout << "Triangulation:"
               << "\n\t Number of active cells: "
               << triangulation.n_active_cells()
