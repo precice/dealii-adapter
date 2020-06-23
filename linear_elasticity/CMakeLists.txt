@@ -3,31 +3,36 @@
 ##
 
 # Set the name of the project and target:
-SET(TARGET "coupled_elasto_dynamics")
+SET(TARGET "linear_elasticity")
 
+SET(TARGET_SRC
+  ${TARGET}.cc
+  )
+
+# To make the dimension switch available via cmake
 IF (NOT DEFINED DIM)
 	SET(DIM 2)
 ENDIF()
 ADD_DEFINITIONS(-DDIM=${DIM})
 
-# Declare all source files the target consists of. Here, this is only
-# the one *.cc file, but as you expand your project you may wish
-# to add other source files as well. If your project becomes much larger,
-# you may want to either replace the following statement by something like
-#    FILE(GLOB_RECURSE TARGET_SRC  "source/*.cc")
-#    FILE(GLOB_RECURSE TARGET_INC  "include/*.h")
-#    SET(TARGET_SRC ${TARGET_SRC}  ${TARGET_INC}) 
-# or switch altogether to the large project CMakeLists.txt file discussed
-# in the "CMake in user projects" page accessible from the "User info"
-# page of the documentation.
-SET(TARGET_SRC
-  ${TARGET}.cc
-  )
+# Change default build type for tutorial cases
+IF(NOT CMAKE_BUILD_TYPE)
+  SET(CMAKE_BUILD_TYPE "Release" CACHE STRING
+      "Choose the type of build, options are: Debug Release"
+      FORCE)
+ENDIF(NOT CMAKE_BUILD_TYPE)
+MESSAGE(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
+
+# To cleanup result files
+SET(CLEAN_UP_FILES
+  # a custom list of globs, e.g. *.log *.vtk
+  *.vtk
+)
 # Usually, you will not need to modify anything beyond this point...
 
 CMAKE_MINIMUM_REQUIRED(VERSION 2.8.12)
 
-FIND_PACKAGE(deal.II 9.1.0 QUIET
+FIND_PACKAGE(deal.II 9.2.0 QUIET
   HINTS ${deal.II_DIR} ${DEAL_II_DIR} ../ ../../ $ENV{DEAL_II_DIR}
   )
 IF(NOT ${deal.II_FOUND})
@@ -46,3 +51,4 @@ DEAL_II_INVOKE_AUTOPILOT()
 
 FIND_PACKAGE(precice REQUIRED)
 TARGET_LINK_LIBRARIES(${TARGET} precice::precice)
+
