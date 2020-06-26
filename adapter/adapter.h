@@ -219,10 +219,14 @@ namespace Adapter
     const VectorType &     deal_to_precice,
     VectorType &           precice_to_deal)
   {
-    Assert(dim == precice.getDimensions(),
-           ExcDimensionMismatch(dim, precice.getDimensions()));
+    AssertThrow(
+      dim == precice.getDimensions(),
+      ExcMessage("The dimension of your solver needs to be consistent with the "
+                 "dimension specified in your precice-config file. In case you "
+                 "run one of the tutorials, the dimension can be specified via "
+                 "cmake -D DIM=dim ."));
 
-    Assert(dim > 1, ExcNotImplemented());
+    AssertThrow(dim > 1, ExcNotImplemented());
 
     // get precice specific IDs from precice and store them in the class
     // they are later needed for data transfer
