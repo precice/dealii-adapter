@@ -219,10 +219,10 @@ namespace Adapter
     const VectorType &     deal_to_precice,
     VectorType &           precice_to_deal)
   {
-    Assert(dim == precice.getDimensions(),
-           ExcDimensionMismatch(dim, precice.getDimensions()));
+    AssertThrow(dim == precice.getDimensions(),
+                ExcDimensionMismatch(dim, precice.getDimensions()));
 
-    Assert(dim > 1, ExcNotImplemented());
+    AssertThrow(dim > 1, ExcNotImplemented());
 
     // get precice specific IDs from precice and store them in the class
     // they are later needed for data transfer

@@ -433,7 +433,7 @@ namespace Nonlinear_Elasticity
   {
     // Assert here, since dimension information is not available in parameter
     // class and the input is parsed as List
-    Assert(
+    AssertThrow(
       (dim == 2 && body_force[2] == 0) || dim == 3,
       ExcMessage(
         "Setting body forces in z-direction for a two dimensional simulation has no effect"));
@@ -538,16 +538,16 @@ namespace Nonlinear_Elasticity
                                      "condition?"))
           }
     // Check, whether the given IDs are mutually exclusive
-    Assert(
+    AssertThrow(
       clamped_id != neumann_boundary_id,
       ExcMessage(
         "Boundary IDs must not be the same, for different boundary types."));
-    Assert(
+    AssertThrow(
       boundary_interface_id != out_of_plane_clamped_mesh_id,
       ExcMessage(
         "Boundary IDs must not be the same, for different boundary types."));
-    Assert(boundary_interface_id == adapter.deal_boundary_interface_id,
-           ExcMessage("Wrong interface ID in the Adapter."));
+    AssertThrow(boundary_interface_id == adapter.deal_boundary_interface_id,
+                ExcMessage("Wrong interface ID in the Adapter."));
 
     vol_reference = GridTools::volume(triangulation);
     vol_current   = vol_reference;

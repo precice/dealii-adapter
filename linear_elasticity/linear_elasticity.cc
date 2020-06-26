@@ -250,11 +250,12 @@ namespace Linear_Elasticity
     // The IDs must not be the same:
     std::string error_message(
       "The interface_id cannot be the same as the clamped one");
-    Assert(clamped_mesh_id != interface_boundary_id, ExcMessage(error_message));
-    Assert(out_of_plane_clamped_mesh_id != interface_boundary_id,
-           ExcMessage(error_message));
-    Assert(interface_boundary_id == adapter.deal_boundary_interface_id,
-           ExcMessage("Wrong interface ID in the Adapter specified"));
+    AssertThrow(clamped_mesh_id != interface_boundary_id,
+                ExcMessage(error_message));
+    AssertThrow(out_of_plane_clamped_mesh_id != interface_boundary_id,
+                ExcMessage(error_message));
+    AssertThrow(interface_boundary_id == adapter.deal_boundary_interface_id,
+                ExcMessage("Wrong interface ID in the Adapter specified"));
 
     // Iterate over all cells and set the IDs
     for (const auto &cell : triangulation.active_cell_iterators())
@@ -695,7 +696,7 @@ namespace Linear_Elasticity
 
     // Check, if the output directory exists
     std::ifstream output_directory(case_path + "dealii_output");
-    Assert(
+    AssertThrow(
       output_directory,
       ExcMessage(
         "Unable to find the output directory. "
