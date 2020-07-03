@@ -621,12 +621,12 @@ namespace Nonlinear_Elasticity
 
     // Alias: Container, which holds references for all time dependent variables
     // to enable a compact notation
-    state_variables = std::vector({&total_displacement,
-                                   &total_displacement_old,
-                                   &velocity,
-                                   &velocity_old,
-                                   &acceleration,
-                                   &acceleration_old});
+    state_variables = {&total_displacement,
+                       &total_displacement_old,
+                       &velocity,
+                       &velocity_old,
+                       &acceleration,
+                       &acceleration_old};
 
     setup_qph();
 
@@ -711,9 +711,10 @@ namespace Nonlinear_Elasticity
         // Check absolute errors for dynamic cases as well, since there might be
         // situations, with small or even no deformations in coupled setups
         if (newton_iteration > 0 &&
-              (error_update_norm.u <= parameters.tol_u &&
-               error_residual_norm.u <= parameters.tol_f) ||
-            (error_update.u <= 1e-15 && error_residual.u <= 5e-9))
+            ((error_update_norm.u <= parameters.tol_u ||
+              error_update.u <= 1e-15) &&
+             (error_residual_norm.u <= parameters.tol_f ||
+              error_residual.u <= 5e-9)))
           {
             std::cout << " CONVERGED! " << std::endl;
             print_conv_footer();
@@ -1356,14 +1357,14 @@ namespace Nonlinear_Elasticity
       if (apply_dirichlet_bc == true)
         VectorTools::interpolate_boundary_values(dof_handler_ref,
                                                  boundary_id,
-                                                 ZeroFunction<dim>(
+                                                 Functions::ZeroFunction<dim>(
                                                    n_components),
                                                  constraints,
                                                  fe.component_mask(u_fe));
       else
         VectorTools::interpolate_boundary_values(dof_handler_ref,
                                                  boundary_id,
-                                                 ZeroFunction<dim>(
+                                                 Functions::ZeroFunction<dim>(
                                                    n_components),
                                                  constraints,
                                                  fe.component_mask(u_fe));
@@ -1380,14 +1381,14 @@ namespace Nonlinear_Elasticity
           VectorTools::interpolate_boundary_values(
             dof_handler_ref,
             boundary_id,
-            ZeroFunction<dim>(n_components),
+            Functions::ZeroFunction<dim>(n_components),
             constraints,
             fe.component_mask(z_displacement));
         else
           VectorTools::interpolate_boundary_values(
             dof_handler_ref,
             boundary_id,
-            ZeroFunction<dim>(n_components),
+            Functions::ZeroFunction<dim>(n_components),
             constraints,
             fe.component_mask(z_displacement));
       }
