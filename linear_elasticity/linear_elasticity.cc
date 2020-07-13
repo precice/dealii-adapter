@@ -259,21 +259,21 @@ namespace Linear_Elasticity
 
     // Iterate over all cells and set the IDs
     for (const auto &cell : triangulation.active_cell_iterators())
-      for (const auto &face : cell->face_iterators())
-        if (face->at_boundary() == true)
+      for (unsigned int face = 0; face < GeometryInfo<dim>::faces_per_cell; ++face)
+        if (cell->face(face)->at_boundary() == true)
           {
             // Boundaries for the interface
-            if (face->boundary_id() == id_flap_short_top ||
-                face->boundary_id() == id_flap_long_bottom ||
-                face->boundary_id() == id_flap_long_top)
-              face->set_boundary_id(interface_boundary_id);
+            if (cell->face(face)->boundary_id() == id_flap_short_top ||
+                cell->face(face)->boundary_id() == id_flap_long_bottom ||
+                cell->face(face)->boundary_id() == id_flap_long_top)
+              cell->face(face)->set_boundary_id(interface_boundary_id);
             // Boundaries clamped in all directions
-            else if (face->boundary_id() == id_flap_short_bottom)
-              face->set_boundary_id(clamped_mesh_id);
+            else if (cell->face(face)->boundary_id() == id_flap_short_bottom)
+              cell->face(face)->set_boundary_id(clamped_mesh_id);
             // Boundaries clamped out-of-plane (z) direction
-            else if (face->boundary_id() == id_flap_out_of_plane_bottom ||
-                     face->boundary_id() == id_flap_out_of_plane_top)
-              face->set_boundary_id(out_of_plane_clamped_mesh_id);
+            else if (cell->face(face)->boundary_id() == id_flap_out_of_plane_bottom ||
+                     cell->face(face)->boundary_id() == id_flap_out_of_plane_top)
+              cell->face(face)->set_boundary_id(out_of_plane_clamped_mesh_id);
           }
   }
 
@@ -500,9 +500,9 @@ namespace Linear_Elasticity
 
         // Assemblw the right-hand side force vector each timestep
         // by applying contributions only on the coupling interface
-        for (const auto &face : cell->face_iterators())
-          if (face->at_boundary() == true &&
-              face->boundary_id() == interface_boundary_id)
+        for (unsigned int face = 0; face < GeometryInfo<dim>::faces_per_cell; ++face)
+          if (cell->face(face)->at_boundary() == true &&
+              cell->face(face)->boundary_id() == interface_boundary_id)
             {
               fe_face_values.reinit(cell, face);
               // Extract relevant data from the global stress vector by using
