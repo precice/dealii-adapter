@@ -259,7 +259,8 @@ namespace Linear_Elasticity
 
     // Iterate over all cells and set the IDs
     for (const auto &cell : triangulation.active_cell_iterators())
-      for (unsigned int face = 0; face < GeometryInfo<dim>::faces_per_cell; ++face)
+      for (unsigned int face = 0; face < GeometryInfo<dim>::faces_per_cell;
+           ++face)
         if (cell->face(face)->at_boundary() == true)
           {
             // Boundaries for the interface
@@ -271,8 +272,10 @@ namespace Linear_Elasticity
             else if (cell->face(face)->boundary_id() == id_flap_short_bottom)
               cell->face(face)->set_boundary_id(clamped_mesh_id);
             // Boundaries clamped out-of-plane (z) direction
-            else if (cell->face(face)->boundary_id() == id_flap_out_of_plane_bottom ||
-                     cell->face(face)->boundary_id() == id_flap_out_of_plane_top)
+            else if (cell->face(face)->boundary_id() ==
+                       id_flap_out_of_plane_bottom ||
+                     cell->face(face)->boundary_id() ==
+                       id_flap_out_of_plane_top)
               cell->face(face)->set_boundary_id(out_of_plane_clamped_mesh_id);
           }
   }
@@ -500,7 +503,8 @@ namespace Linear_Elasticity
 
         // Assemblw the right-hand side force vector each timestep
         // by applying contributions only on the coupling interface
-        for (unsigned int face = 0; face < GeometryInfo<dim>::faces_per_cell; ++face)
+        for (unsigned int face = 0; face < GeometryInfo<dim>::faces_per_cell;
+             ++face)
           if (cell->face(face)->at_boundary() == true &&
               cell->face(face)->boundary_id() == interface_boundary_id)
             {

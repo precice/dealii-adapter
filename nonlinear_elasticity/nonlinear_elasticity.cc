@@ -517,7 +517,8 @@ namespace Nonlinear_Elasticity
 
     // Finally, set the IDs
     for (const auto &cell : triangulation.active_cell_iterators())
-      for (unsigned int face = 0; face < GeometryInfo<dim>::faces_per_cell; ++face)
+      for (unsigned int face = 0; face < GeometryInfo<dim>::faces_per_cell;
+           ++face)
         if (cell->face(face)->at_boundary() == true)
           {
             if (cell->face(face)->boundary_id() == id_flap_short_bottom)
@@ -527,8 +528,10 @@ namespace Nonlinear_Elasticity
                      cell->face(face)->boundary_id() == id_flap_short_top)
               cell->face(face)->set_boundary_id(neumann_boundary_id);
             // Boundaries clamped out-of-plane (z) direction
-            else if (cell->face(face)->boundary_id() == id_flap_out_of_plane_bottom ||
-                     cell->face(face)->boundary_id() == id_flap_out_of_plane_top)
+            else if (cell->face(face)->boundary_id() ==
+                       id_flap_out_of_plane_bottom ||
+                     cell->face(face)->boundary_id() ==
+                       id_flap_out_of_plane_top)
               cell->face(face)->set_boundary_id(out_of_plane_clamped_mesh_id);
 
             else
@@ -570,7 +573,9 @@ namespace Nonlinear_Elasticity
     dof_handler_ref.distribute_dofs(fe);
     DoFRenumbering::Cuthill_McKee(dof_handler_ref);
     DoFRenumbering::component_wise(dof_handler_ref, block_component);
-    DoFTools::count_dofs_per_block(dof_handler_ref, dofs_per_block, block_component);
+    DoFTools::count_dofs_per_block(dof_handler_ref,
+                                   dofs_per_block,
+                                   block_component);
 
     std::cout.imbue(std::locale(""));
     std::cout << "Triangulation:"
@@ -1054,8 +1059,10 @@ namespace Nonlinear_Elasticity
       const FEValuesExtractors::Vector &u_fe = data.solid->u_fe;
       const unsigned int &interf_id = data.solid->boundary_interface_id;
 
-      for (unsigned int face = 0; face < GeometryInfo<dim>::faces_per_cell; ++face)
-        if (cell->face(face)->at_boundary() == true && cell->face(face)->boundary_id() == interf_id)
+      for (unsigned int face = 0; face < GeometryInfo<dim>::faces_per_cell;
+           ++face)
+        if (cell->face(face)->at_boundary() == true &&
+            cell->face(face)->boundary_id() == interf_id)
           {
             scratch.fe_face_values_ref.reinit(cell, face);
 
