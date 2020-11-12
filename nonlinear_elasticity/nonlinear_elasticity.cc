@@ -2,6 +2,7 @@
 #include <deal.II/base/parameter_handler.h>
 #include <deal.II/base/quadrature_lib.h>
 #include <deal.II/base/quadrature_point_data.h>
+#include <deal.II/base/revision.h>
 #include <deal.II/base/tensor.h>
 #include <deal.II/base/timer.h>
 #include <deal.II/base/work_stream.h>
@@ -1501,11 +1502,29 @@ main(int argc, char **argv)
   using namespace Nonlinear_Elasticity;
   using namespace dealii;
 
-  Utilities::MPI::MPI_InitFinalize mpi_initialization(argc, argv, 1);
+  Utilities::MPI::MPI_InitFinalize mpi_initialization(argc, argv);
 
   try
     {
       deallog.depth_console(0);
+      const int n_threads = dealii::MultithreadInfo::n_threads();
+
+      std::cout
+        << "-----------------------------------------------------------------------------"
+        << std::endl
+        << "--     . running with " << n_threads << " thread"
+        << (n_threads == 1 ? "" : "s") << std::endl;
+
+      std::cout << "--     . revision " << GIT_SHORTREV << " on branch "
+                << GIT_BRANCH << std::endl;
+      std::cout << "--     . deal.II " << DEAL_II_PACKAGE_VERSION
+                << " (revision " << DEAL_II_GIT_SHORTREV << " on branch "
+                << DEAL_II_GIT_BRANCH << ")" << std::endl;
+      std::cout
+        << "-----------------------------------------------------------------------------"
+        << std::endl
+        << std::endl;
+
 
       std::string parameter_file;
       if (argc > 1)
