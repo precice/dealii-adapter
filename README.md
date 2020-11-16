@@ -3,6 +3,8 @@
     <img src="https://travis-ci.org/precice/dealii-adapter.svg?branch=master" alt="Build status">
 </a>
 
+![GitHub building](https://github.com/precice/dealii-adapter/workflows/.github/workflows/building.yml/badge.svg)
+
 Coupled structural solvers written with the C++ finite element library deal.II:
 
 - `linear_elasticity` contains a linear-elastic solver based on the [step-8 tutorial program](https://www.dealii.org/9.2.0/doxygen/deal.II/step_8.html) of deal.II
