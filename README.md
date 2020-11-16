@@ -1,9 +1,8 @@
 # dealii-adapter
+![Building](https://github.com/precice/dealii-adapter/workflows/Building/badge.svg)
 <a style="text-decoration: none" href="https://travis-ci.org/precice/dealii-adapter" target="_blank">
     <img src="https://travis-ci.org/precice/dealii-adapter.svg?branch=master" alt="Build status">
 </a>
-
-![GitHub building](https://github.com/precice/dealii-adapter/workflows/.github/workflows/building.yml/badge.svg)
 
 Coupled structural solvers written with the C++ finite element library deal.II:
 
