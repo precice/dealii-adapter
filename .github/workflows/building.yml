@@ -27,7 +27,7 @@ jobs:
                   make && \
                   cd nonlinear_elasticity && \
                   cmake . && \
-                  make;
+                  make";
          
          echo $command
          
