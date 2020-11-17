@@ -1,0 +1,35 @@
+name: Building
+
+on:
+  push:
+    branches: [ master, develop ]
+  pull_request:
+    branches: [ master, develop ]
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v2
+    - name: setup
+      run: |
+         command="sudo apt-get -y update && \
+                  wget https://github.com/precice/precice/releases/download/v2.1.1/libprecice2_2.1.1_focal.deb && \
+                  sudo apt-get -y install ./libprecice2_2.1.1_focal.deb && \
+                  git clone https://github.com/${{ github.repository }} && \
+                  cd dealii-adapter && \
+                  git fetch origin ${{ github.ref }} && \
+                  git checkout FETCH_HEAD && \
+                  cd linear_elasticity && \
+                  cmake . && \
+                  make && \
+                  cd ../nonlinear_elasticity && \
+                  cmake . && \
+                  make";
+         
+         echo $command
+         
+         docker pull dealii/dealii:v9.2.0-focal
+         docker run -t dealii/dealii:v9.2.0-focal /bin/sh -c "$command";
