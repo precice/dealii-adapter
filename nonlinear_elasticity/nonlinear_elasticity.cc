@@ -1502,12 +1502,21 @@ main(int argc, char **argv)
   using namespace Nonlinear_Elasticity;
   using namespace dealii;
 
-  Utilities::MPI::MPI_InitFinalize mpi_initialization(argc, argv);
-
   try
     {
       deallog.depth_console(0);
-      const int n_threads = dealii::MultithreadInfo::n_threads();
+      static const unsigned int n_threads = MultithreadInfo::n_threads();
+
+      // Query adapter and deal.II info
+      const std::string adapter_info =
+        GIT_SHORTREV == std::string("") ?
+          "unknown" :
+          (GIT_SHORTREV + std::string(" on branch ") + GIT_BRANCH);
+      const std::string dealii_info =
+        DEAL_II_GIT_SHORTREV == std::string("") ?
+          "unknown" :
+          (DEAL_II_GIT_SHORTREV + std::string(" on branch ") +
+           DEAL_II_GIT_BRANCH);
 
       std::cout
         << "-----------------------------------------------------------------------------"
@@ -1515,11 +1524,9 @@ main(int argc, char **argv)
         << "--     . running with " << n_threads << " thread"
         << (n_threads == 1 ? "" : "s") << std::endl;
 
-      std::cout << "--     . revision " << GIT_SHORTREV << " on branch "
-                << GIT_BRANCH << std::endl;
+      std::cout << "--     . adapter revision " << adapter_info << std::endl;
       std::cout << "--     . deal.II " << DEAL_II_PACKAGE_VERSION
-                << " (revision " << DEAL_II_GIT_SHORTREV << " on branch "
-                << DEAL_II_GIT_BRANCH << ")" << std::endl;
+                << " (revision " << dealii_info << ")" << std::endl;
       std::cout
         << "-----------------------------------------------------------------------------"
         << std::endl
