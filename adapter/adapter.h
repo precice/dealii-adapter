@@ -136,6 +136,10 @@ namespace Adapter
     const std::string read_data_name;
     const std::string write_data_name;
 
+    // To be adjusted for MPI parallelized codes
+    static constexpr unsigned int this_mpi_process = 0;
+    static constexpr unsigned int n_mpi_processes  = 1;
+
     // These IDs are given by preCICE during initialization
     int mesh_id;
     int read_data_id;
@@ -202,8 +206,8 @@ namespace Adapter
     const unsigned int    deal_boundary_interface_id)
     : precice(parameters.participant_name,
               parameters.config_file,
-              Utilities::MPI::this_mpi_process(MPI_COMM_WORLD),
-              Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD))
+              this_mpi_process,
+              n_mpi_processes)
     , deal_boundary_interface_id(deal_boundary_interface_id)
     , mesh_name(parameters.mesh_name)
     , read_data_name(parameters.read_data_name)
