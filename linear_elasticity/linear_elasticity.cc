@@ -1,6 +1,7 @@
 #include <deal.II/base/function.h>
 #include <deal.II/base/parameter_handler.h>
 #include <deal.II/base/quadrature_lib.h>
+#include <deal.II/base/revision.h>
 #include <deal.II/base/tensor.h>
 #include <deal.II/base/timer.h>
 
@@ -796,10 +797,30 @@ main(int argc, char **argv)
   using namespace Linear_Elasticity;
   using namespace dealii;
 
-  Utilities::MPI::MPI_InitFinalize mpi_initialization(argc, argv, 1);
-
   try
     {
+      // Query adapter and deal.II info
+      const std::string adapter_info =
+        GIT_SHORTREV == std::string("") ?
+          "unknown" :
+          (GIT_SHORTREV + std::string(" on branch ") + GIT_BRANCH);
+      const std::string dealii_info =
+        DEAL_II_GIT_SHORTREV == std::string("") ?
+          "unknown" :
+          (DEAL_II_GIT_SHORTREV + std::string(" on branch ") +
+           DEAL_II_GIT_BRANCH);
+
+      std::cout
+        << "-----------------------------------------------------------------------------"
+        << std::endl;
+      std::cout << "--     . adapter revision " << adapter_info << std::endl;
+      std::cout << "--     . deal.II " << DEAL_II_PACKAGE_VERSION
+                << " (revision " << dealii_info << ")" << std::endl;
+      std::cout
+        << "-----------------------------------------------------------------------------"
+        << std::endl
+        << std::endl;
+
       std::string parameter_file;
       if (argc > 1)
         parameter_file = argv[1];
