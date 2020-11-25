@@ -204,12 +204,46 @@ namespace Linear_Elasticity
         id_flap_short_bottom = 0; // y direction
         id_flap_short_top    = 1;
       }
+    else if (parameters.scenario == "PFleft"){
+        
+        n_x          = 3;
+        n_y          = 18;
+        n_z          = 1;
+        
+        point_bottom =
+   	      dim == 3 ? Point<dim>(-1.05, 0, 0) : Point<dim>(-1.05, 0);  
+        point_tip = dim == 3 ? Point<dim>(-0.95, 1, 0.3) : Point<dim>(-0.95, 1); //flap 1/2
+    
+        // IDs for PF
+        id_flap_long_bottom  = 0; // x direction
+        id_flap_long_top     = 1;
+        id_flap_short_bottom = 2; // y direction
+        id_flap_short_top    = 3;
+    
+    }
+    else if (parameters.scenario == "PFright"){
+        
+        n_x          = 3;
+        n_y          = 18;
+        n_z          = 1;
+        
+        point_bottom =
+          dim == 3 ? Point<dim>(0.95, 0, 0) : Point<dim>(0.95, 0);  
+        point_tip = dim == 3 ? Point<dim>(1.05, 1, 0.3) : Point<dim>(1.05, 1); // flap 2/2
+    
+        // IDs for PF
+        id_flap_long_bottom  = 0; // x direction
+        id_flap_long_top     = 1;
+        id_flap_short_bottom = 2; // y direction
+        id_flap_short_top    = 3;
+    }
     else
       {
         // Flap_perp case
         n_x = 3;
         n_y = 18;
         n_z = 1;
+        
         point_bottom =
           dim == 3 ? Point<dim>(-0.05, 0, 0) : Point<dim>(-0.05, 0);
         point_tip = dim == 3 ? Point<dim>(0.05, 1, 0.3) : Point<dim>(0.05, 1);
