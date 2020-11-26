@@ -797,6 +797,10 @@ main(int argc, char **argv)
   using namespace Linear_Elasticity;
   using namespace dealii;
 
+#ifdef DEAL_II_WITH_MPI
+  Utilities::MPI::MPI_InitFinalize mpi_initialization(argc, argv, 1);
+#endif
+
   try
     {
       // Query adapter and deal.II info
