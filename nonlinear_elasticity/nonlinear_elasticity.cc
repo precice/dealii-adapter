@@ -1503,7 +1503,7 @@ main(int argc, char **argv)
   using namespace dealii;
 
 #ifdef DEAL_II_WITH_MPI
-  Utilities::MPI::MPI_InitFinalize mpi_initialization(argc, argv, 1);
+  Utilities::MPI::MPI_InitFinalize mpi_initialization(argc, argv);
 #endif
 
   try
