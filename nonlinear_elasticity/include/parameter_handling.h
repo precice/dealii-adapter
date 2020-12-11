@@ -289,6 +289,7 @@ namespace Nonlinear_Elasticity
       std::string mesh_name;
       std::string read_data_name;
       std::string write_data_name;
+      std::string flap_location;
 
       static void
       declare_parameters(ParameterHandler &prm);
@@ -331,6 +332,11 @@ namespace Nonlinear_Elasticity
           "calculated-data",
           Patterns::Anything(),
           "Name of the write data in the precice-config.xml file");
+        prm.declare_entry(
+          "Flap location",
+          "center",
+          Patterns::Selection("center|left|right"),
+          "Cases: center, left, right locations for perpendicular flap PF");
       }
       prm.leave_subsection();
     }
@@ -346,6 +352,8 @@ namespace Nonlinear_Elasticity
         mesh_name        = prm.get("Mesh name");
         read_data_name   = prm.get("Read data name");
         write_data_name  = prm.get("Write data name");
+        flap_location    = prm.get("Flap location");
+
       }
       prm.leave_subsection();
     }
