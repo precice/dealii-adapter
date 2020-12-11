@@ -306,7 +306,7 @@ namespace Nonlinear_Elasticity
       {
         prm.declare_entry("Scenario",
                           "FSI3",
-                          Patterns::Selection("FSI3|PF|PFleft|PFright"),
+                          Patterns::Selection("FSI3|PF"),
                           "Cases: FSI3 or PF for perpendicular flap");
         prm.declare_entry("precice config-file",
                           "precice-config.xml",

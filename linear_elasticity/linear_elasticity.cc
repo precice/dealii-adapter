@@ -204,56 +204,33 @@ namespace Linear_Elasticity
         id_flap_short_bottom = 0; // y direction
         id_flap_short_top    = 1;
       }
-    else if (parameters.scenario == "PFleft"){
+    // PF Case
+    else {
         
         n_x          = 3;
         n_y          = 18;
         n_z          = 1;
         
-        point_bottom =
-   	      dim == 3 ? Point<dim>(-1.05, 0, 0) : Point<dim>(-1.05, 0);  
-        point_tip = dim == 3 ? Point<dim>(-0.95, 1, 0.3) : Point<dim>(-0.95, 1); //flap 1/2
-    
-        // IDs for PF
-        id_flap_long_bottom  = 0; // x direction
-        id_flap_long_top     = 1;
-        id_flap_short_bottom = 2; // y direction
-        id_flap_short_top    = 3;
-    
-    }
-    else if (parameters.scenario == "PFright"){
-        
-        n_x          = 3;
-        n_y          = 18;
-        n_z          = 1;
-        
-        point_bottom =
-          dim == 3 ? Point<dim>(0.95, 0, 0) : Point<dim>(0.95, 0);  
-        point_tip = dim == 3 ? Point<dim>(1.05, 1, 0.3) : Point<dim>(1.05, 1); // flap 2/2
-    
-        // IDs for PF
-        id_flap_long_bottom  = 0; // x direction
-        id_flap_long_top     = 1;
-        id_flap_short_bottom = 2; // y direction
-        id_flap_short_top    = 3;
-    }
-    else
-      {
-        // Flap_perp case
-        n_x = 3;
-        n_y = 18;
-        n_z = 1;
-        
-        point_bottom =
-          dim == 3 ? Point<dim>(-0.05, 0, 0) : Point<dim>(-0.05, 0);
-        point_tip = dim == 3 ? Point<dim>(0.05, 1, 0.3) : Point<dim>(0.05, 1);
+        double flap_xlocation;
+        if (parameters.flap_location == "center"){
+          flap_xlocation = 0.0;
+        } else if (parameters.flap_location == "left"){
+          flap_xlocation = -1.0;
+        } else {
+          flap_xlocation = 1.0;
+        }
 
+        point_bottom =
+   	      dim == 3 ? Point<dim>(flap_xlocation - 0.05, 0, 0) : Point<dim>(flap_xlocation - 0.05, 0);  
+        point_tip = dim == 3 ? Point<dim>(flap_xlocation + 0.05, 1, 0.3) : Point<dim>(flap_xlocation + 0.05, 1); //flap has a 0.1 width
+    
         // IDs for PF
         id_flap_long_bottom  = 0; // x direction
         id_flap_long_top     = 1;
         id_flap_short_bottom = 2; // y direction
         id_flap_short_top    = 3;
-      }
+    
+    }
 
     // Same for both scenarios, only relevant for quasi-2D
     id_flap_out_of_plane_bottom = 4; // z direction
