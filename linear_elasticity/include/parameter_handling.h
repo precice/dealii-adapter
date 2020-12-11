@@ -223,7 +223,7 @@ namespace Linear_Elasticity
       std::string mesh_name;
       std::string read_data_name;
       std::string write_data_name;
-      std::string flap_location;
+      double flap_location;
 
       static void
       declare_parameters(ParameterHandler &prm);
@@ -268,9 +268,9 @@ namespace Linear_Elasticity
           "Name of the write data in the precice-config.xml file");
         prm.declare_entry(
           "Flap location",
-          "center",
-          Patterns::Selection("center|left|right"),
-          "Cases: center, left, right locations for perpendicular flap PF");
+          "0.0",
+          Patterns::Double(-3, 3),
+          "PF x-location");
       }
       prm.leave_subsection();
     }
@@ -286,7 +286,7 @@ namespace Linear_Elasticity
         mesh_name        = prm.get("Mesh name");
         read_data_name   = prm.get("Read data name");
         write_data_name  = prm.get("Write data name");
-        flap_location    = prm.get("Flap location");
+        flap_location    = prm.get_double("Flap location");
       }
       prm.leave_subsection();
     }

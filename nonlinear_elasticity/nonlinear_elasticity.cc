@@ -470,14 +470,7 @@ namespace Nonlinear_Elasticity
         n_y          = 18;
         n_z          = 1;
         
-        double flap_xlocation;
-        if (parameters.flap_location == "center"){
-          flap_xlocation = 0.0;
-        } else if (parameters.flap_location == "left"){
-          flap_xlocation = -1.0;
-        } else {
-          flap_xlocation = 1.0;
-        }
+        double flap_xlocation = parameters.flap_location;
 
         point_bottom =
    	      dim == 3 ? Point<dim>(flap_xlocation - 0.05, 0, 0) : Point<dim>(flap_xlocation - 0.05, 0);  
