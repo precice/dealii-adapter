@@ -446,25 +446,25 @@ namespace Nonlinear_Elasticity
       id_flap_short_top, n_x, n_y, n_z;
 
     // Assertion is done via a input pattern in the parameter class
-    if (testcase == "PF")
-      { // flap_perp
-        point_bottom =
-          dim == 3 ? Point<dim>(-0.05, 0, 0) : Point<dim>(-0.05, 0);
-        point_tip = dim == 3 ? Point<dim>(0.05, 1, 0.3) : Point<dim>(0.05, 1);
+    if (parameters.scenario == "FSI3")
+      { 
+        // FSI 3
+        n_x          = 18;
+        n_y          = 3;
+        n_z          = 1;
+        point_bottom = dim == 3 ? Point<dim>(0.24899, 0.19, -0.005) :
+                                  Point<dim>(0.24899, 0.19);
+        point_tip =
+          dim == 3 ? Point<dim>(0.6, 0.21, 0.005) : Point<dim>(0.6, 0.21);
 
-        // IDs for PF
-        id_flap_long_bottom  = 0; // x direction
-        id_flap_long_top     = 1;
-        id_flap_short_bottom = 2; // y direction
-        id_flap_short_top    = 3;
-
-        n_x = 3;
-        n_y = 18;
-        n_z = 1;
+        // IDs for FSI3
+        id_flap_long_bottom  = 2; // x direction
+        id_flap_long_top     = 3;
+        id_flap_short_bottom = 0; // y direction
+        id_flap_short_top    = 1;
       }
-
-         // PF Case
-    else {
+      // PF Case
+      else {
         
         n_x          = 3;
         n_y          = 18;
@@ -480,7 +480,7 @@ namespace Nonlinear_Elasticity
         id_flap_long_bottom  = 0; // x direction
         id_flap_long_top     = 1;
         id_flap_short_bottom = 2; // y direction
-        id_flap_short_top    = 3;
+        id_flap_short_top    = 3;   
     
     }      
 
