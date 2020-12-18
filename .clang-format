@@ -1,5 +1,5 @@
 #
-# The clang-format (Clang 6) style file used by deal.II.
+# The clang-format style file used by deal.II (Clang 11 instead of Clang 6)
 #
 
 AccessModifierOffset: -2
