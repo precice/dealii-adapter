@@ -48,3 +48,11 @@ CMakeFiles/
 *.includes
 
 *.swp
+
+# Compiled binaries
+linear_elasticity/linear_elasticity
+nonlinear_elasticity/nonlinear_elasticity
+
+
+
+

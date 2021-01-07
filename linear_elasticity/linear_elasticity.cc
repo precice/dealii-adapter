@@ -204,15 +204,20 @@ namespace Linear_Elasticity
         id_flap_short_bottom = 0; // y direction
         id_flap_short_top    = 1;
       }
+    // PF Case
     else
       {
-        // Flap_perp case
         n_x = 3;
         n_y = 18;
         n_z = 1;
-        point_bottom =
-          dim == 3 ? Point<dim>(-0.05, 0, 0) : Point<dim>(-0.05, 0);
-        point_tip = dim == 3 ? Point<dim>(0.05, 1, 0.3) : Point<dim>(0.05, 1);
+
+        double flap_xlocation = parameters.flap_location;
+
+        point_bottom = dim == 3 ? Point<dim>(flap_xlocation - 0.05, 0, 0) :
+                                  Point<dim>(flap_xlocation - 0.05, 0);
+        point_tip    = dim == 3 ? Point<dim>(flap_xlocation + 0.05, 1, 0.3) :
+                                  Point<dim>(flap_xlocation + 0.05,
+                                          1); // flap has a 0.1 width
 
         // IDs for PF
         id_flap_long_bottom  = 0; // x direction
