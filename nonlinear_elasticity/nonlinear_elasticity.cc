@@ -446,39 +446,43 @@ namespace Nonlinear_Elasticity
       id_flap_short_top, n_x, n_y, n_z;
 
     // Assertion is done via a input pattern in the parameter class
-    if (testcase == "PF")
-      { // flap_perp
-        point_bottom =
-          dim == 3 ? Point<dim>(-0.05, 0, 0) : Point<dim>(-0.05, 0);
-        point_tip = dim == 3 ? Point<dim>(0.05, 1, 0.3) : Point<dim>(0.05, 1);
-
-        // IDs for PF
-        id_flap_long_bottom  = 0; // x direction
-        id_flap_long_top     = 1;
-        id_flap_short_bottom = 2; // y direction
-        id_flap_short_top    = 3;
-
-        n_x = 3;
-        n_y = 18;
-        n_z = 1;
-      }
-    else // FSI3, don't use condition to avoid wmaybe unitialized warning
-      {
+    if (parameters.scenario == "FSI3")
+      { 
+        // FSI 3
+        n_x          = 18;
+        n_y          = 3;
+        n_z          = 1;
         point_bottom = dim == 3 ? Point<dim>(0.24899, 0.19, -0.005) :
                                   Point<dim>(0.24899, 0.19);
         point_tip =
           dim == 3 ? Point<dim>(0.6, 0.21, 0.005) : Point<dim>(0.6, 0.21);
 
-        // IDs for FSI3/CSM2
+        // IDs for FSI3
         id_flap_long_bottom  = 2; // x direction
         id_flap_long_top     = 3;
         id_flap_short_bottom = 0; // y direction
         id_flap_short_top    = 1;
-
-        n_x = 25;
-        n_y = 2;
-        n_z = 1;
       }
+      // PF Case
+      else {
+        
+        n_x          = 3;
+        n_y          = 18;
+        n_z          = 1;
+        
+        double flap_xlocation = parameters.flap_location;
+
+        point_bottom =
+   	      dim == 3 ? Point<dim>(flap_xlocation - 0.05, 0, 0) : Point<dim>(flap_xlocation - 0.05, 0);  
+        point_tip = dim == 3 ? Point<dim>(flap_xlocation + 0.05, 1, 0.3) : Point<dim>(flap_xlocation + 0.05, 1); //flap has a 0.1 width
+    
+        // IDs for PF
+        id_flap_long_bottom  = 0; // x direction
+        id_flap_long_top     = 1;
+        id_flap_short_bottom = 2; // y direction
+        id_flap_short_top    = 3;   
+    
+    }      
 
     // Same for both scenarios, only relevant for quasi-2D
     const unsigned int id_flap_out_of_plane_bottom = 4; // z direction
