@@ -285,7 +285,7 @@ namespace Linear_Elasticity
         mesh_name        = prm.get("Mesh name");
         read_data_name   = prm.get("Read data name");
         write_data_name  = prm.get("Write data name");
-        flap_location    = prm.get_double("Flap x-location");
+        flap_location    = prm.get_double("Flap location");
       }
       prm.leave_subsection();
     }
