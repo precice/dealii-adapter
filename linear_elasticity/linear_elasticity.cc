@@ -77,7 +77,7 @@ namespace Linear_Elasticity
     assemble_rhs();
 
     void
-    assemble_consistent_loading(Vector<double> &dst);
+    assemble_consistent_loading();
 
     // Solve the linear system
     void
@@ -482,7 +482,7 @@ namespace Linear_Elasticity
 
     // In case we get consistent data
     if (parameters.data_consistent)
-      assemble_consistent_loading(system_rhs);
+      assemble_consistent_loading();
     else // In case we get conservative data
       system_rhs = stress;
     // Update time dependent variables related to the previous time step t_n
@@ -556,9 +556,9 @@ namespace Linear_Elasticity
   // Process RHS assembly, which is the coupling data (stress) in this case
   template <int dim>
   void
-  ElastoDynamics<dim>::assemble_consistent_loading(Vector<double> &dst)
+  ElastoDynamics<dim>::assemble_consistent_loading()
   { // Initialize all objects as usual
-    dst = 0.0;
+    system_rhs = 0.0;
 
     // Quadrature formula for integration over faces (dim-1)
     QGauss<dim - 1> face_quadrature_formula(quad_order);
@@ -614,7 +614,7 @@ namespace Linear_Elasticity
         cell->get_dof_indices(local_dof_indices);
         for (unsigned int i = 0; i < dofs_per_cell; ++i)
           {
-            dst(local_dof_indices[i]) += cell_rhs(i);
+            system_rhs(local_dof_indices[i]) += cell_rhs(i);
           }
       }
   }
