@@ -336,9 +336,9 @@ namespace Adapter
 
         precice.markActionFulfilled(
           precice::constants::actionWriteInitialData());
-
-        precice.initializeData();
       }
+
+    precice.initializeData();
 
     // read initial readData from preCICE if required for the first time step
     if (precice.isReadDataAvailable())
