@@ -224,6 +224,7 @@ namespace Linear_Elasticity
       std::string read_data_name;
       std::string write_data_name;
       double      flap_location;
+      bool        data_consistent;
 
       static void
       declare_parameters(ParameterHandler &prm);
@@ -288,6 +289,16 @@ namespace Linear_Elasticity
         flap_location    = prm.get_double("Flap location");
       }
       prm.leave_subsection();
+      // Look at the specific type of read data
+      if ((read_data_name.find("Stress") == 0))
+        data_consistent = true;
+      else if ((read_data_name.find("Force") == 0))
+        data_consistent = false;
+      else
+        AssertThrow(
+          false,
+          ExcMessage(
+            "Unknown read data type. Please use 'Force' or 'Stress' in the read data naming."));
     }
 
 

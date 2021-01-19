@@ -76,6 +76,9 @@ namespace Linear_Elasticity
     void
     assemble_rhs();
 
+    void
+    assemble_consistent_loading();
+
     // Solve the linear system
     void
     solve();
@@ -477,68 +480,11 @@ namespace Linear_Elasticity
   {
     timer.enter_subsection("Assemble rhs");
 
-    // Initialize all objects as usual
-    system_rhs = 0.0;
-
-    // Quadrature formula for integration over faces (dim-1)
-    QGauss<dim - 1> face_quadrature_formula(quad_order);
-
-    FEFaceValues<dim> fe_face_values(mapping,
-                                     fe,
-                                     face_quadrature_formula,
-                                     update_values | update_quadrature_points |
-                                       update_JxW_values);
-
-    const unsigned int dofs_per_cell   = fe.dofs_per_cell;
-    const unsigned int n_face_q_points = face_quadrature_formula.size();
-
-    Vector<double>                       cell_rhs(dofs_per_cell);
-    std::vector<types::global_dof_index> local_dof_indices(dofs_per_cell);
-
-
-    // In order to get the local fe values
-    std::vector<Vector<double>> local_stress(n_face_q_points,
-                                             Vector<double>(dim));
-
-    for (const auto &cell : dof_handler.active_cell_iterators())
-      {
-        cell_rhs = 0;
-
-        // Assemblw the right-hand side force vector each timestep
-        // by applying contributions only on the coupling interface
-        for (const auto &face : cell->face_iterators())
-          if (face->at_boundary() == true &&
-              face->boundary_id() == interface_boundary_id)
-            {
-              fe_face_values.reinit(cell, face);
-              // Extract relevant data from the global stress vector by using
-              // 'get_function_values()'
-              // In contrast to the nonlinear solver, no pull back is performed.
-              // The equilibrium is stated in reference configuration, but only
-              // valid for very small deformations
-              fe_face_values.get_function_values(stress, local_stress);
-
-              for (unsigned int f_q_point = 0; f_q_point < n_face_q_points;
-                   ++f_q_point)
-                for (unsigned int i = 0; i < dofs_per_cell; ++i)
-                  {
-                    const unsigned int component_i =
-                      fe.system_to_component_index(i).first;
-
-                    cell_rhs(i) += fe_face_values.shape_value(i, f_q_point) *
-                                   local_stress[f_q_point][component_i] *
-                                   fe_face_values.JxW(f_q_point);
-                  }
-            }
-
-        // Local dofs to global
-        cell->get_dof_indices(local_dof_indices);
-        for (unsigned int i = 0; i < dofs_per_cell; ++i)
-          {
-            system_rhs(local_dof_indices[i]) += cell_rhs(i);
-          }
-      }
-
+    // In case we get consistent data
+    if (parameters.data_consistent)
+      assemble_consistent_loading();
+    else // In case we get conservative data
+      system_rhs = stress;
     // Update time dependent variables related to the previous time step t_n
     old_velocity     = velocity;
     old_displacement = displacement;
@@ -604,6 +550,73 @@ namespace Linear_Elasticity
                                        system_rhs);
 
     timer.leave_subsection("Assemble rhs");
+  }
+
+
+  // Process RHS assembly, which is the coupling data (stress) in this case
+  template <int dim>
+  void
+  ElastoDynamics<dim>::assemble_consistent_loading()
+  { // Initialize all objects as usual
+    system_rhs = 0.0;
+
+    // Quadrature formula for integration over faces (dim-1)
+    QGauss<dim - 1> face_quadrature_formula(quad_order);
+
+    FEFaceValues<dim> fe_face_values(mapping,
+                                     fe,
+                                     face_quadrature_formula,
+                                     update_values | update_JxW_values);
+
+    const unsigned int dofs_per_cell   = fe.dofs_per_cell;
+    const unsigned int n_face_q_points = face_quadrature_formula.size();
+
+    Vector<double>                       cell_rhs(dofs_per_cell);
+    std::vector<types::global_dof_index> local_dof_indices(dofs_per_cell);
+
+
+    // In order to get the local fe values
+    std::vector<Vector<double>> local_stress(n_face_q_points,
+                                             Vector<double>(dim));
+
+    for (const auto &cell : dof_handler.active_cell_iterators())
+      {
+        cell_rhs = 0;
+
+        // Assemble the right-hand side force vector each timestep
+        // by applying contributions only on the coupling interface
+        for (const auto &face : cell->face_iterators())
+          if (face->at_boundary() == true &&
+              face->boundary_id() == interface_boundary_id)
+            {
+              fe_face_values.reinit(cell, face);
+              // Extract relevant data from the global stress vector by using
+              // 'get_function_values()'
+              // In contrast to the nonlinear solver, no pull back is performed.
+              // The equilibrium is stated in reference configuration, but only
+              // valid for very small deformations
+              fe_face_values.get_function_values(stress, local_stress);
+
+              for (unsigned int f_q_point = 0; f_q_point < n_face_q_points;
+                   ++f_q_point)
+                for (unsigned int i = 0; i < dofs_per_cell; ++i)
+                  {
+                    const unsigned int component_i =
+                      fe.system_to_component_index(i).first;
+
+                    cell_rhs(i) += fe_face_values.shape_value(i, f_q_point) *
+                                   local_stress[f_q_point][component_i] *
+                                   fe_face_values.JxW(f_q_point);
+                  }
+            }
+
+        // Local dofs to global
+        cell->get_dof_indices(local_dof_indices);
+        for (unsigned int i = 0; i < dofs_per_cell; ++i)
+          {
+            system_rhs(local_dof_indices[i]) += cell_rhs(i);
+          }
+      }
   }
 
 
