@@ -583,7 +583,7 @@ namespace Linear_Elasticity
       {
         cell_rhs = 0;
 
-        // Assemblw the right-hand side force vector each timestep
+        // Assemble the right-hand side force vector each timestep
         // by applying contributions only on the coupling interface
         for (const auto &face : cell->face_iterators())
           if (face->at_boundary() == true &&
