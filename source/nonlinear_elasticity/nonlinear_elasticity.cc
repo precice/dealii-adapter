@@ -1,3 +1,5 @@
+#include "include/nonlinear_elasticity.h"
+
 #include <deal.II/base/function.h>
 #include <deal.II/base/parameter_handler.h>
 #include <deal.II/base/quadrature_lib.h>
@@ -48,9 +50,6 @@
 #include <fstream>
 #include <iostream>
 
-#include "../adapter/adapter.h"
-#include "../adapter/time.h"
-#include "include/compressible_neo_hook_material.h"
 #include "include/parameter_handling.h"
 #include "include/postprocessor.h"
 
@@ -58,278 +57,277 @@ namespace Nonlinear_Elasticity
 {
   using namespace dealii;
 
-
-  // PointHistory class offers a method for storing data at the quadrature
-  // points. Here each quadrature point holds a pointer to a material
-  // description
-  template <int dim, typename NumberType>
-  class PointHistory
+  namespace Parameters
   {
-  public:
-    PointHistory()
-    {}
+    AllParameters::AllParameters(const std::string &input_file)
+    {
+      ParameterHandler prm;
+      declare_parameters(prm);
+      prm.parse_input(input_file);
+      parse_parameters(prm);
 
-    virtual ~PointHistory()
-    {}
+      // Optional, if we want to print all parameters in the beginning of the
+      // simulation
+      //      prm.print_parameters(std::cout,ParameterHandler::Text);
+    }
 
     void
-    setup_lqp(const Parameters::AllParameters &parameters)
+    Discretization::declare_parameters(ParameterHandler &prm)
     {
-      material.reset(
-        new Material_Compressible_Neo_Hook_One_Field<dim, NumberType>(
-          parameters.mu, parameters.nu, parameters.rho));
+      prm.enter_subsection("Discretization");
+      {
+        prm.declare_entry("beta",
+                          "0.25",
+                          Patterns::Double(0, 0.5),
+                          "Newmark beta");
+
+        prm.declare_entry("gamma",
+                          "0.5",
+                          Patterns::Double(0, 1),
+                          "Newmark gamma");
+
+        prm.declare_entry("Polynomial degree",
+                          "3",
+                          Patterns::Integer(0),
+                          "Polynomial degree of the FE system");
+      }
+      prm.leave_subsection();
     }
 
-    // Strain energy
-    NumberType
-    get_Psi(const NumberType &                         det_F,
-            const SymmetricTensor<2, dim, NumberType> &b_bar) const
+    void
+    Discretization::parse_parameters(ParameterHandler &prm)
     {
-      return material->get_Psi(det_F, b_bar);
-    }
-    // Kirchhoff stress
-    SymmetricTensor<2, dim, NumberType>
-    get_tau(const NumberType &                         det_F,
-            const SymmetricTensor<2, dim, NumberType> &b_bar) const
-    {
-      return material->get_tau(det_F, b_bar);
-    }
-    // Tangent
-    SymmetricTensor<4, dim, NumberType>
-    get_Jc(const NumberType &                         det_F,
-           const SymmetricTensor<2, dim, NumberType> &b_bar) const
-    {
-      return material->get_Jc(det_F, b_bar);
-    }
-    // Density
-    NumberType
-    get_rho() const
-    {
-      return material->get_rho();
+      prm.enter_subsection("Discretization");
+      {
+        beta        = prm.get_double("beta");
+        gamma       = prm.get_double("gamma");
+        poly_degree = prm.get_integer("Polynomial degree");
+      }
+      prm.leave_subsection();
     }
 
-  private:
-    std::shared_ptr<Material_Compressible_Neo_Hook_One_Field<dim, NumberType>>
-      material;
-  };
+    void
+    PreciceAdapterConfiguration::declare_parameters(ParameterHandler &prm)
+    {
+      prm.enter_subsection("precice configuration");
+      {
+        prm.declare_entry("Scenario",
+                          "FSI3",
+                          Patterns::Selection("FSI3|PF"),
+                          "Cases: FSI3 or PF for perpendicular flap");
+        prm.declare_entry("precice config-file",
+                          "precice-config.xml",
+                          Patterns::Anything(),
+                          "Name of the precice configuration file");
+        prm.declare_entry(
+          "Participant name",
+          "dealiisolver",
+          Patterns::Anything(),
+          "Name of the participant in the precice-config.xml file");
+        prm.declare_entry(
+          "Mesh name",
+          "dealii-mesh",
+          Patterns::Anything(),
+          "Name of the coupling mesh in the precice-config.xml file");
+        prm.declare_entry(
+          "Read data name",
+          "received-data",
+          Patterns::Anything(),
+          "Name of the read data in the precice-config.xml file");
+        prm.declare_entry(
+          "Write data name",
+          "calculated-data",
+          Patterns::Anything(),
+          "Name of the write data in the precice-config.xml file");
+        prm.declare_entry("Flap location",
+                          "0.0",
+                          Patterns::Double(-3, 3),
+                          "PF x-location");
+      }
+      prm.leave_subsection();
+    }
 
+    void
+    PreciceAdapterConfiguration::parse_parameters(ParameterHandler &prm)
+    {
+      prm.enter_subsection("precice configuration");
+      {
+        scenario         = prm.get("Scenario");
+        config_file      = prm.get("precice config-file");
+        participant_name = prm.get("Participant name");
+        mesh_name        = prm.get("Mesh name");
+        read_data_name   = prm.get("Read data name");
+        write_data_name  = prm.get("Write data name");
+        flap_location    = prm.get_double("Flap location");
+      }
+      prm.leave_subsection();
+    }
 
-  // Forward declarations for classes that will perform assembly of the
-  // linearized system
-  template <int dim, typename NumberType>
-  struct Assembler_Base;
-  template <int dim, typename NumberType>
-  struct Assembler;
+    void
+    Time::declare_parameters(ParameterHandler &prm)
+    {
+      prm.enter_subsection("Time");
+      {
+        prm.declare_entry("End time", "1", Patterns::Double(), "End time");
 
-  // The Solid class is the central class in that it represents the problem at
-  // hand. It follows the usual scheme in that all it really has is a
-  // constructor, destructor and a run() function that dispatches all the work
-  // to private functions of this class:
-  template <int dim, typename NumberType = double>
-  class Solid
+        prm.declare_entry("Time step size",
+                          "0.1",
+                          Patterns::Double(),
+                          "Time step size");
+
+        prm.declare_entry("Output interval",
+                          "1",
+                          Patterns::Integer(),
+                          "Output interval");
+      }
+      prm.leave_subsection();
+    }
+
+    void
+    Time::parse_parameters(ParameterHandler &prm)
+    {
+      prm.enter_subsection("Time");
+      {
+        end_time        = prm.get_double("End time");
+        delta_t         = prm.get_double("Time step size");
+        output_interval = prm.get_integer("Output interval");
+      }
+      prm.leave_subsection();
+    }
+
+    void
+    NonlinearSolver::declare_parameters(ParameterHandler &prm)
+    {
+      prm.enter_subsection("Nonlinear solver");
+      {
+        prm.declare_entry("Max iterations Newton-Raphson",
+                          "10",
+                          Patterns::Integer(0),
+                          "Number of Newton-Raphson iterations allowed");
+
+        prm.declare_entry("Tolerance force",
+                          "1.0e-9",
+                          Patterns::Double(0.0),
+                          "Force residual tolerance");
+
+        prm.declare_entry("Tolerance displacement",
+                          "1.0e-6",
+                          Patterns::Double(0.0),
+                          "Displacement error tolerance");
+      }
+      prm.leave_subsection();
+    }
+
+    void
+    NonlinearSolver::parse_parameters(ParameterHandler &prm)
+    {
+      prm.enter_subsection("Nonlinear solver");
+      {
+        max_iterations_NR = prm.get_integer("Max iterations Newton-Raphson");
+        tol_f             = prm.get_double("Tolerance force");
+        tol_u             = prm.get_double("Tolerance displacement");
+      }
+      prm.leave_subsection();
+    }
+
+    void
+    LinearSolver::declare_parameters(ParameterHandler &prm)
+    {
+      prm.enter_subsection("Linear solver");
+      {
+        prm.declare_entry("Solver type",
+                          "CG",
+                          Patterns::Selection("CG|Direct"),
+                          "Linear solver: CG or Direct");
+
+        prm.declare_entry("Residual",
+                          "1e-6",
+                          Patterns::Double(0.0),
+                          "Linear solver residual (scaled by residual norm)");
+
+        prm.declare_entry(
+          "Max iteration multiplier",
+          "1",
+          Patterns::Double(0.0),
+          "Linear solver iterations (multiples of the system matrix size)");
+      }
+      prm.leave_subsection();
+    }
+    void
+    System::declare_parameters(ParameterHandler &prm)
+    {
+      prm.enter_subsection("System properties");
+      {
+        prm.declare_entry("Poisson's ratio",
+                          "0.3",
+                          Patterns::Double(-1.0, 0.5),
+                          "Poisson's ratio");
+
+        prm.declare_entry("Shear modulus",
+                          "0.4225e6",
+                          Patterns::Double(),
+                          "Shear modulus");
+
+        prm.declare_entry("rho", "1000", Patterns::Double(), "rho");
+
+        prm.declare_entry("body forces",
+                          "0,0,0",
+                          Patterns::List(Patterns::Double()),
+                          "body forces x,y,z");
+      }
+      prm.leave_subsection();
+    }
+
+    void
+    System::parse_parameters(ParameterHandler &prm)
+    {
+      prm.enter_subsection("System properties");
+      {
+        nu  = prm.get_double("Poisson's ratio");
+        mu  = prm.get_double("Shear modulus");
+        rho = prm.get_double("rho");
+        const std::vector<std::string> body_forces_input =
+          Utilities::split_string_list(prm.get("body forces"));
+        for (uint d = 0; d < 3; ++d)
+          body_force[d] = Utilities::string_to_double(body_forces_input[d]);
+      }
+      prm.leave_subsection();
+    }
+
+    void
+    LinearSolver::parse_parameters(ParameterHandler &prm)
+    {
+      prm.enter_subsection("Linear solver");
+      {
+        type_lin           = prm.get("Solver type");
+        tol_lin            = prm.get_double("Residual");
+        max_iterations_lin = prm.get_double("Max iteration multiplier");
+      }
+      prm.leave_subsection();
+    }
+  } // namespace Parameters
+
+  void
+  Parameters::AllParameters::declare_parameters(ParameterHandler &prm)
   {
-  public:
-    Solid(const std::string &case_path);
+    System::declare_parameters(prm);
+    LinearSolver::declare_parameters(prm);
+    NonlinearSolver::declare_parameters(prm);
+    Time::declare_parameters(prm);
+    Discretization::declare_parameters(prm);
+    PreciceAdapterConfiguration::declare_parameters(prm);
+  }
 
-    virtual ~Solid();
-
-    void
-    run();
-
-  private:
-    // Generates grid and sets boundary IDs, which are needed for different BCs
-    void
-    make_grid();
-    // Set up the finite element system to be solved
-    void
-    system_setup();
-
-    // Several functions to assemble the system and right hand side matrices
-    // using multithreading. Each of them comes as a wrapper function, one that
-    // is executed to do the work in the WorkStream model on one cell, and one
-    // that copies the work done on this one cell into the global object that
-    // represents it
-    void
-    assemble_system(const BlockVector<double> &solution_delta,
-                    const BlockVector<double> &acceleration,
-                    const BlockVector<double> &external_stress);
-
-    // We use a separate data structure to perform the assembly. It needs access
-    // to some low-level data, so we simply befriend the class instead of
-    // creating a complex interface to provide access as necessary.
-    friend struct Assembler_Base<dim, NumberType>;
-    friend struct Assembler<dim, NumberType>;
-
-    // Apply Dirichlet boundary conditions on the displacement field
-    void
-    make_constraints(const int &it_nr);
-
-    // Create and update the quadrature points. Here, no data needs to be copied
-    // into a global object, so the copy_local_to_global function is empty:
-    void
-    setup_qph();
-
-    // Solve for the displacement using a Newton-Raphson method.
-    void
-    solve_nonlinear_timestep(BlockVector<double> &solution_delta);
-
-    std::pair<unsigned int, double>
-    solve_linear_system(BlockVector<double> &newton_update);
-
-    // Solution retrieval
-    BlockVector<double>
-    get_total_solution(const BlockVector<double> &solution_delta) const;
-
-    // Update fnuctions for time dependent variables according to Newmarks
-    // scheme
-    void
-    update_acceleration(BlockVector<double> &displacement_delta);
-
-    void
-    update_velocity(BlockVector<double> &displacement_delta);
-
-    void
-    update_old_variables();
-
-    // Post-processing and writing data to file :
-    void
-    output_results() const;
-
-    const Parameters::AllParameters parameters;
-
-    double vol_reference;
-    double vol_current;
-
-    Triangulation<dim> triangulation;
-
-    CellDataStorage<typename Triangulation<dim>::cell_iterator,
-                    PointHistory<dim, NumberType>>
-      quadrature_point_history;
-
-    const unsigned int               degree;
-    const FESystem<dim>              fe;
-    DoFHandler<dim>                  dof_handler_ref;
-    const unsigned int               dofs_per_cell;
-    const FEValuesExtractors::Vector u_fe;
-
-    // Description of how the block-system is arranged. There is just 1 block,
-    // that contains a vector DOF u. This is a legacy of the original work
-    // (step-44)
-    static const unsigned int n_blocks          = 1;
-    static const unsigned int n_components      = dim;
-    static const unsigned int first_u_component = 0;
-
-    enum
-    {
-      u_dof = 0
-    };
-
-    std::vector<types::global_dof_index> dofs_per_block;
-
-    const QGauss<dim>     qf_cell;
-    const QGauss<dim - 1> qf_face;
-    const unsigned int    n_q_points;
-    const unsigned int    n_q_points_f;
-    // Interface ID, which is later assigned to the mesh region for coupling
-    // It is chosen arbotrarily
-    const unsigned int boundary_interface_id;
-
-    // Newmark parameters
-    // Coefficients, which are needed for time dependencies
-    const double alpha_1 =
-      1. / (parameters.beta * std::pow(parameters.delta_t, 2));
-    const double alpha_2 = 1. / (parameters.beta * parameters.delta_t);
-    const double alpha_3 = (1 - (2 * parameters.beta)) / (2 * parameters.beta);
-    const double alpha_4 =
-      parameters.gamma / (parameters.beta * parameters.delta_t);
-    const double alpha_5 = 1 - (parameters.gamma / parameters.beta);
-    const double alpha_6 =
-      (1 - (parameters.gamma / (2 * parameters.beta))) * parameters.delta_t;
-
-    // Read body force from parameter file
-    const Tensor<1, 3, double> body_force = parameters.body_force;
-
-    // Clamped boundary ID to be used consistently
-    const unsigned int clamped_boundary_id          = 1;
-    const unsigned int out_of_plane_clamped_mesh_id = 8;
-
-    // ..and store the directory, in order to output the result files there
-    const std::string case_path;
-
-    AffineConstraints<double> constraints;
-    BlockSparsityPattern      sparsity_pattern;
-    BlockSparseMatrix<double> tangent_matrix;
-    BlockVector<double>       system_rhs;
-    BlockVector<double>       total_displacement;
-    BlockVector<double>       total_displacement_old;
-    BlockVector<double>       velocity;
-    BlockVector<double>       velocity_old;
-    BlockVector<double>       acceleration;
-    BlockVector<double>       acceleration_old;
-
-    // Alias to collect all time dependent variables in a single vector
-    // This is directly passed to the Adapter routine in order to
-    // store these variables for implicit couplings.
-    std::vector<BlockVector<double> *> state_variables;
-
-    // Global vector, which keeps all contributions of the Fluid participant
-    // i.e. stress data for assembly. This vector is filled properly in the
-    // Adapter
-    BlockVector<double> external_stress;
-
-    // In order to measure some timings
-    mutable TimerOutput timer;
-
-    // The main adapter objects: The time class keeps track of the current time
-    // and time steps. The Adapter class includes all functionalities for
-    // coupling via preCICE. Look at the documentation of the class for more
-    // information.
-    Adapter::Time time;
-    Adapter::Adapter<dim, BlockVector<double>, Parameters::AllParameters>
-      adapter;
-
-    // Then define a number of variables to store norms and update norms and
-    // normalisation factors.
-    struct Errors
-    {
-      Errors()
-        : u(1.0)
-      {}
-
-      void
-      reset()
-      {
-        u = 1.0;
-      }
-      void
-      normalise(const Errors &val)
-      {
-        if (val.u != 0.0)
-          u /= val.u;
-      }
-
-      double u;
-    };
-
-    Errors error_residual, error_residual_0, error_residual_norm, error_update,
-      error_update_0, error_update_norm;
-
-    // Methods to calculate erros
-    void
-    get_error_residual(Errors &error_residual);
-
-    void
-    get_error_update(const BlockVector<double> &newton_update,
-                     Errors &                   error_update);
-
-    // Print information to screen during simulation
-    static void
-    print_conv_header();
-
-    void
-    print_conv_footer();
-  };
-
+  void
+  Parameters::AllParameters::parse_parameters(ParameterHandler &prm)
+  {
+    System::parse_parameters(prm);
+    LinearSolver::parse_parameters(prm);
+    NonlinearSolver::parse_parameters(prm);
+    Time::parse_parameters(prm);
+    Discretization::parse_parameters(prm);
+    PreciceAdapterConfiguration::parse_parameters(prm);
+  }
 
   // Constructor initializes member variables and reads the parameter file
   template <int dim, typename NumberType>
@@ -1499,90 +1497,5 @@ namespace Nonlinear_Elasticity
     timer.leave_subsection("Output results");
   }
 
+  template class Solid<DIM, double>;
 } // namespace Nonlinear_Elasticity
-
-int
-main(int argc, char **argv)
-{
-  using namespace Nonlinear_Elasticity;
-  using namespace dealii;
-
-#ifdef DEAL_II_WITH_MPI
-  Utilities::MPI::MPI_InitFinalize mpi_initialization(argc, argv);
-#endif
-
-  try
-    {
-      deallog.depth_console(0);
-      static const unsigned int n_threads = MultithreadInfo::n_threads();
-
-      // Query adapter and deal.II info
-      const std::string adapter_info =
-        GIT_SHORTREV == std::string("") ?
-          "unknown" :
-          (GIT_SHORTREV + std::string(" on branch ") + GIT_BRANCH);
-      const std::string dealii_info =
-        DEAL_II_GIT_SHORTREV == std::string("") ?
-          "unknown" :
-          (DEAL_II_GIT_SHORTREV + std::string(" on branch ") +
-           DEAL_II_GIT_BRANCH);
-
-      std::cout
-        << "-----------------------------------------------------------------------------"
-        << std::endl
-        << "--     . running with " << n_threads << " thread"
-        << (n_threads == 1 ? "" : "s") << std::endl;
-
-      std::cout << "--     . adapter revision " << adapter_info << std::endl;
-      std::cout << "--     . deal.II " << DEAL_II_PACKAGE_VERSION
-                << " (revision " << dealii_info << ")" << std::endl;
-      std::cout
-        << "-----------------------------------------------------------------------------"
-        << std::endl
-        << std::endl;
-
-
-      std::string parameter_file;
-      if (argc > 1)
-        parameter_file = argv[1];
-      else
-        parameter_file = "nonlinear_elasticity.prm";
-
-      // Extract case path for the output directory
-      size_t      pos = parameter_file.find_last_of("/");
-      std::string case_path =
-        std::string::npos == pos ? "" : parameter_file.substr(0, pos + 1);
-
-      // Dimension is determinded via cmake -DDIM
-      Solid<DIM> solid(case_path);
-      solid.run();
-    }
-  catch (std::exception &exc)
-    {
-      std::cerr << std::endl
-                << std::endl
-                << "----------------------------------------------------"
-                << std::endl;
-      std::cerr << "Exception on processing: " << std::endl
-                << exc.what() << std::endl
-                << "Aborting!" << std::endl
-                << "----------------------------------------------------"
-                << std::endl;
-
-      return 1;
-    }
-  catch (...)
-    {
-      std::cerr << std::endl
-                << std::endl
-                << "----------------------------------------------------"
-                << std::endl;
-      std::cerr << "Unknown exception!" << std::endl
-                << "Aborting!" << std::endl
-                << "----------------------------------------------------"
-                << std::endl;
-      return 1;
-    }
-
-  return 0;
-}
