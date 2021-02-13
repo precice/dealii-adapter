@@ -22,10 +22,6 @@ jobs:
                   cd dealii-adapter && \
                   git fetch origin ${{ github.ref }} && \
                   git checkout FETCH_HEAD && \
-                  cd linear_elasticity && \
-                  cmake . && \
-                  make && \
-                  cd ../nonlinear_elasticity && \
                   cmake . && \
                   make";
          
