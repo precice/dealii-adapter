@@ -1,5 +1,4 @@
-#ifndef POSTPROCESSOR_H
-#define POSTPROCESSOR_H
+#pragma once
 
 #include <deal.II/numerics/data_postprocessor.h>
 
@@ -122,4 +121,3 @@ namespace Linear_Elasticity
   }
 
 } // namespace Linear_Elasticity
-#endif // POSTPROCESSOR_H

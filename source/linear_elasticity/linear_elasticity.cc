@@ -1,3 +1,5 @@
+#include "include/linear_elasticity.h"
+
 #include <deal.II/base/function.h>
 #include <deal.II/base/parameter_handler.h>
 #include <deal.II/base/quadrature_lib.h>
@@ -33,11 +35,12 @@
 #include <deal.II/numerics/matrix_tools.h>
 #include <deal.II/numerics/vector_tools.h>
 
+#include <adapter/adapter.h>
+#include <adapter/time_handler.h>
+
 #include <fstream>
 #include <iostream>
 
-#include "../adapter/adapter.h"
-#include "../adapter/time.h"
 #include "include/parameter_handling.h"
 #include "include/postprocessor.h"
 
@@ -47,105 +50,241 @@ namespace Linear_Elasticity
 {
   using namespace dealii;
 
-  template <int dim>
-  class ElastoDynamics
+  namespace Parameters
   {
-  public:
-    ElastoDynamics(const std::string &case_path);
-    ~ElastoDynamics();
-    // As usual in dealii, the run function covers the main time loop of the
-    // system
     void
-    run();
+    Time::declare_parameters(ParameterHandler &prm)
+    {
+      prm.enter_subsection("Time");
+      {
+        prm.declare_entry("End time", "1", Patterns::Double(), "End time");
 
-  private:
-    // Create the mesh and set boundary IDs for different boundary conditions
-    void
-    make_grid();
+        prm.declare_entry("Time step size",
+                          "0.1",
+                          Patterns::Double(),
+                          "Time step size");
 
-    // Set up the FE system and allocate data structures
-    void
-    setup_system();
-
-    // Compute time invariant matrices e.g. stiffness matrix and mass matrix
-    void
-    assemble_system();
-
-    // Assemble the Neumann contribution i.e. the coupling data obtained from
-    // the Fluid participant
-    void
-    assemble_rhs();
+        prm.declare_entry("Output interval",
+                          "1",
+                          Patterns::Integer(0),
+                          "Write results every x timesteps");
+      }
+      prm.leave_subsection();
+    }
 
     void
-    assemble_consistent_loading();
+    Time::parse_parameters(ParameterHandler &prm)
+    {
+      prm.enter_subsection("Time");
+      {
+        end_time        = prm.get_double("End time");
+        delta_t         = prm.get_double("Time step size");
+        output_interval = prm.get_integer("Output interval");
+      }
+      prm.leave_subsection();
+    }
 
-    // Solve the linear system
     void
-    solve();
+    Discretization::declare_parameters(ParameterHandler &prm)
+    {
+      prm.enter_subsection("Discretization");
+      {
+        prm.declare_entry("theta",
+                          "0.5",
+                          Patterns::Double(0, 1),
+                          "Time integration scheme");
 
-    // Update the displacement according to the theta scheme
+        prm.declare_entry("Polynomial degree",
+                          "3",
+                          Patterns::Integer(0),
+                          "Polynomial degree of the FE system");
+      }
+      prm.leave_subsection();
+    }
+
     void
-    update_displacement();
+    Discretization::parse_parameters(ParameterHandler &prm)
+    {
+      prm.enter_subsection("Discretization");
+      {
+        theta       = prm.get_double("theta");
+        poly_degree = prm.get_integer("Polynomial degree");
+      }
+      prm.leave_subsection();
+    }
 
-    // Output results to vtk files
     void
-    output_results() const;
+    System::declare_parameters(ParameterHandler &prm)
+    {
+      prm.enter_subsection("System properties");
+      {
+        prm.declare_entry("mu", "0.5e6", Patterns::Double(), "mu");
 
-    // Paramter class parsing all user specific input parameters
-    const Parameters::AllParameters parameters;
+        prm.declare_entry("lambda", "2e6", Patterns::Double(), "lambda");
 
-    // Boundary IDs, reserved for the respectve application
-    unsigned int       clamped_mesh_id;
-    unsigned int       out_of_plane_clamped_mesh_id;
-    const unsigned int interface_boundary_id;
+        prm.declare_entry("rho", "1000", Patterns::Double(0.0), "density");
 
-    // Dealii typical objects
-    Triangulation<dim>   triangulation;
-    DoFHandler<dim>      dof_handler;
-    FESystem<dim>        fe;
-    MappingQGeneric<dim> mapping;
-    const unsigned int   quad_order;
+        prm.declare_entry("body forces",
+                          "0,0,0",
+                          Patterns::List(Patterns::Double()),
+                          "body forces x,y,z");
+      }
+      prm.leave_subsection();
+    }
 
-    AffineConstraints<double> hanging_node_constraints;
+    void
+    System::parse_parameters(ParameterHandler &prm)
+    {
+      prm.enter_subsection("System properties");
+      {
+        mu     = prm.get_double("mu");
+        lambda = prm.get_double("lambda");
+        rho    = prm.get_double("rho");
+        const std::vector<std::string> body_forces_input =
+          Utilities::split_string_list(prm.get("body forces"));
+        for (uint d = 0; d < 3; ++d)
+          body_force[d] = Utilities::string_to_double(body_forces_input[d]);
+      }
+      prm.leave_subsection();
+    }
 
-    // Matrices used during computations
-    SparsityPattern      sparsity_pattern;
-    SparseMatrix<double> mass_matrix;
-    SparseMatrix<double> stiffness_matrix;
-    SparseMatrix<double> system_matrix;
-    SparseMatrix<double> stepping_matrix;
 
-    // Time dependent variables
-    Vector<double> old_velocity;
-    Vector<double> velocity;
-    Vector<double> old_displacement;
-    Vector<double> displacement;
-    Vector<double> old_stress;
-    Vector<double> stress;
-    Vector<double> system_rhs;
+    void
+    LinearSolver::declare_parameters(ParameterHandler &prm)
+    {
+      prm.enter_subsection("Linear solver");
+      {
+        prm.declare_entry("Solver type",
+                          "Direct",
+                          Patterns::Selection("CG|Direct"),
+                          "Linear solver: CG or Direct");
 
-    // Body forces e.g. gravity. Values are specified in the input file
-    const bool     body_force_enabled;
-    Vector<double> body_force_vector;
+        prm.declare_entry("Residual",
+                          "1e-6",
+                          Patterns::Double(0.0),
+                          "Linear solver residual (scaled by residual norm)");
 
-    // In order to measure some timings
-    mutable TimerOutput timer;
+        prm.declare_entry(
+          "Max iteration multiplier",
+          "1",
+          Patterns::Double(0.0),
+          "Linear solver iterations (multiples of the system matrix size)");
+      }
+      prm.leave_subsection();
+    }
 
-    // The main adapter objects: The time class keeps track of the current time
-    // and time steps. The Adapter class includes all functionalities for
-    // coupling via preCICE. Look at the documentation of the class for more
-    // information.
-    Adapter::Time                                                    time;
-    Adapter::Adapter<dim, Vector<double>, Parameters::AllParameters> adapter;
+    void
+    LinearSolver::parse_parameters(ParameterHandler &prm)
+    {
+      prm.enter_subsection("Linear solver");
+      {
+        type_lin           = prm.get("Solver type");
+        tol_lin            = prm.get_double("Residual");
+        max_iterations_lin = prm.get_double("Max iteration multiplier");
+      }
+      prm.leave_subsection();
+    }
 
-    // Alias for all time dependent variables, which should be saved/reloaded
-    // in case of an implicit coupling. This vector is directly used in the
-    // Adapter class
-    std::vector<Vector<double> *> state_variables;
-    // for the output directory
-    const std::string case_path;
-  };
+    void
+    PreciceAdapterConfiguration::declare_parameters(ParameterHandler &prm)
+    {
+      prm.enter_subsection("precice configuration");
+      {
+        prm.declare_entry("Scenario",
+                          "FSI3",
+                          Patterns::Selection("FSI3|PF"),
+                          "Cases: FSI3 or PF for perpendicular flap");
+        prm.declare_entry("precice config-file",
+                          "precice-config.xml",
+                          Patterns::Anything(),
+                          "Name of the precice configuration file");
+        prm.declare_entry(
+          "Participant name",
+          "dealiisolver",
+          Patterns::Anything(),
+          "Name of the participant in the precice-config.xml file");
+        prm.declare_entry(
+          "Mesh name",
+          "dealii-mesh",
+          Patterns::Anything(),
+          "Name of the coupling mesh in the precice-config.xml file");
+        prm.declare_entry(
+          "Read data name",
+          "received-data",
+          Patterns::Anything(),
+          "Name of the read data in the precice-config.xml file");
+        prm.declare_entry(
+          "Write data name",
+          "calculated-data",
+          Patterns::Anything(),
+          "Name of the write data in the precice-config.xml file");
+        prm.declare_entry("Flap location",
+                          "0.0",
+                          Patterns::Double(-3, 3),
+                          "PF x-location");
+      }
+      prm.leave_subsection();
+    }
 
+    void
+    PreciceAdapterConfiguration::parse_parameters(ParameterHandler &prm)
+    {
+      prm.enter_subsection("precice configuration");
+      {
+        scenario         = prm.get("Scenario");
+        config_file      = prm.get("precice config-file");
+        participant_name = prm.get("Participant name");
+        mesh_name        = prm.get("Mesh name");
+        read_data_name   = prm.get("Read data name");
+        write_data_name  = prm.get("Write data name");
+        flap_location    = prm.get_double("Flap location");
+      }
+      prm.leave_subsection();
+      // Look at the specific type of read data
+      if ((read_data_name.find("Stress") == 0))
+        data_consistent = true;
+      else if ((read_data_name.find("Force") == 0))
+        data_consistent = false;
+      else
+        AssertThrow(
+          false,
+          ExcMessage(
+            "Unknown read data type. Please use 'Force' or 'Stress' in the read data naming."));
+    }
+
+    AllParameters::AllParameters(const std::string &input_file)
+    {
+      ParameterHandler prm;
+      declare_parameters(prm);
+      prm.parse_input(input_file);
+      parse_parameters(prm);
+
+      // Optional, if we want to print all parameters in the beginning of the
+      // simulation
+      //      prm.print_parameters(std::cout,ParameterHandler::Text);
+    }
+
+    void
+    AllParameters::declare_parameters(ParameterHandler &prm)
+    {
+      LinearSolver::declare_parameters(prm);
+      Discretization::declare_parameters(prm);
+      System::declare_parameters(prm);
+      Time::declare_parameters(prm);
+      PreciceAdapterConfiguration::declare_parameters(prm);
+    }
+
+    void
+    AllParameters::parse_parameters(ParameterHandler &prm)
+    {
+      LinearSolver::parse_parameters(prm);
+      Discretization::parse_parameters(prm);
+      System::parse_parameters(prm);
+      Time::parse_parameters(prm);
+      PreciceAdapterConfiguration::parse_parameters(prm);
+    }
+
+  } // namespace Parameters
 
 
   // Constructor
@@ -807,82 +946,6 @@ namespace Linear_Elasticity
     // communication etc.
     adapter.precice.finalize();
   }
+
+  template class ElastoDynamics<DIM>;
 } // namespace Linear_Elasticity
-
-int
-main(int argc, char **argv)
-{
-  using namespace Linear_Elasticity;
-  using namespace dealii;
-
-#ifdef DEAL_II_WITH_MPI
-  Utilities::MPI::MPI_InitFinalize mpi_initialization(argc, argv);
-#endif
-
-  try
-    {
-      // Query adapter and deal.II info
-      const std::string adapter_info =
-        GIT_SHORTREV == std::string("") ?
-          "unknown" :
-          (GIT_SHORTREV + std::string(" on branch ") + GIT_BRANCH);
-      const std::string dealii_info =
-        DEAL_II_GIT_SHORTREV == std::string("") ?
-          "unknown" :
-          (DEAL_II_GIT_SHORTREV + std::string(" on branch ") +
-           DEAL_II_GIT_BRANCH);
-
-      std::cout
-        << "-----------------------------------------------------------------------------"
-        << std::endl;
-      std::cout << "--     . adapter revision " << adapter_info << std::endl;
-      std::cout << "--     . deal.II " << DEAL_II_PACKAGE_VERSION
-                << " (revision " << dealii_info << ")" << std::endl;
-      std::cout
-        << "-----------------------------------------------------------------------------"
-        << std::endl
-        << std::endl;
-
-      std::string parameter_file;
-      if (argc > 1)
-        parameter_file = argv[1];
-      else
-        parameter_file = "linear_elasticity.prm";
-
-      // Extract case path for the output directory
-      size_t      pos = parameter_file.find_last_of("/");
-      std::string case_path =
-        std::string::npos == pos ? "" : parameter_file.substr(0, pos + 1);
-
-      ElastoDynamics<DIM> elastic_solver(case_path);
-      elastic_solver.run();
-    }
-  catch (std::exception &exc)
-    {
-      std::cerr << std::endl
-                << std::endl
-                << "----------------------------------------------------"
-                << std::endl;
-      std::cerr << "Exception on processing: " << std::endl
-                << exc.what() << std::endl
-                << "Aborting!" << std::endl
-                << "----------------------------------------------------"
-                << std::endl;
-
-      return 1;
-    }
-  catch (...)
-    {
-      std::cerr << std::endl
-                << std::endl
-                << "----------------------------------------------------"
-                << std::endl;
-      std::cerr << "Unknown exception!" << std::endl
-                << "Aborting!" << std::endl
-                << "----------------------------------------------------"
-                << std::endl;
-      return 1;
-    }
-
-  return 0;
-}
