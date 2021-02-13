@@ -1,6 +1,5 @@
-//#include <source/linear_elasticity/linear_elasticity.h>
+#include "source/linear_elasticity/include/linear_elasticity.h"
 #include "source/nonlinear_elasticity/include/nonlinear_elasticity.h"
-
 
 int
 main(int argc, char **argv)
@@ -20,7 +19,7 @@ main(int argc, char **argv)
       const std::string adapter_info =
         GIT_SHORTREV == std::string("") ?
           "unknown" :
-          (GIT_SHORTREV + std::string(" on branch ") + "GIT_BRANCH");
+          (GIT_SHORTREV + std::string(" on branch ") + GIT_BRANCH);
       const std::string dealii_info =
         DEAL_II_GIT_SHORTREV == std::string("") ?
           "unknown" :
@@ -44,7 +43,7 @@ main(int argc, char **argv)
 
       std::string parameter_file;
       if (argc > 1)
-        parameter_file = argv[1];
+        parameter_file = argv[2];
       else
         parameter_file = "nonlinear_elasticity.prm";
 
@@ -53,9 +52,20 @@ main(int argc, char **argv)
       std::string case_path =
         std::string::npos == pos ? "" : parameter_file.substr(0, pos + 1);
 
+      std::string solver_type = argv[1];
       // Dimension is determinded via cmake -DDIM
-      Nonlinear_Elasticity::Solid<DIM> solid(case_path);
-      solid.run();
+      if (solver_type == "-nonlinear") // nonlinear
+        {
+          Nonlinear_Elasticity::Solid<DIM> solid(case_path);
+          solid.run();
+        }
+      else if (solver_type == "-linear") // linear
+        {
+          Linear_Elasticity::ElastoDynamics<DIM> elastic_solver(case_path);
+          elastic_solver.run();
+        }
+      else
+        AssertThrow(false, ExcMessage("Unknown solver specified. "))
     }
   catch (std::exception &exc)
     {
