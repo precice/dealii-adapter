@@ -59,7 +59,7 @@ map_boundary_dofs_to_support_points(
           for (unsigned int i = 0; i < fe.n_dofs_per_face(); ++i)
             {
               const unsigned int dof_comp =
-                fe.system_to_component_index(i).first;
+                fe.face_system_to_component_index(i).first;
 
               // insert the values into the map if it is a valid component
               if (mask[dof_comp])
