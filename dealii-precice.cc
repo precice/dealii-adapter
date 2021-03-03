@@ -45,7 +45,7 @@ main(int argc, char **argv)
       if (argc > 1)
         parameter_file = argv[2];
       else
-        parameter_file = "nonlinear_elasticity.prm";
+        parameter_file = "parameters.prm";
 
       // Extract case path for the output directory
       size_t      pos = parameter_file.find_last_of("/");

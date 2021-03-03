@@ -14,29 +14,25 @@ subsection Time
 end
 
 subsection Discretization
-  # Time integration scheme
-  # 0 = forward, 1 = backward
-  set theta               = 0.5
-
   # Polynomial degree of the FE system
   set Polynomial degree   = 3
 end
 
 subsection System properties
-  # mu (shear modulus)
-  set mu              = 0.5e6
+  # Poisson's ratio
+  set Poisson's ratio = 0.4
 
-  # lambda
-  set lambda          = 2e6
+  # Shear modulus
+  set Shear modulus   = 0.5e6
 
-  # density
-  set rho             = 1000
+  # Density
+  set rho	      = 1000
 
-  # body forces x,y,z
+  # Body forces x,y,z
   set body forces     = 0.0,0.0,0.0
 end
 
-subsection Linear solver
+subsection Solver
   # Linear solver iterations (multiples of the system matrix size)
   set Max iteration multiplier  = 1
 
@@ -45,6 +41,15 @@ subsection Linear solver
 
   # Linear solver: CG or Direct
   set Solver type               = Direct
+
+  # Number of Newton-Raphson iterations allowed
+  set Max iterations Newton-Raphson = 10
+
+  # Displacement error tolerance
+  set Tolerance displacement        = 1.0e-6
+
+  # Force residual tolerance
+  set Tolerance force               = 1.0e-9
 end
 
 subsection precice configuration
