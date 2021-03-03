@@ -54,16 +54,17 @@ main(int argc, char **argv)
       ParameterHandler   prm;
       Parameters::Solver solver;
       solver.add_output_parameters(prm);
-      prm.parse_input(case_path + parameter_file, "", true);
+      prm.parse_input(parameter_file, "", true);
 
       if (solver.model == "neo-Hook") // nonlinear
         {
-          Nonlinear_Elasticity::Solid<DIM> solid(case_path);
+          Nonlinear_Elasticity::Solid<DIM> solid(case_path, parameter_file);
           solid.run();
         }
       else if (solver.model == "linear") // linear
         {
-          Linear_Elasticity::ElastoDynamics<DIM> elastic_solver(case_path);
+          Linear_Elasticity::ElastoDynamics<DIM> elastic_solver(case_path,
+                                                                parameter_file);
           elastic_solver.run();
         }
       else

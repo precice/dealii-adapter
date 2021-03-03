@@ -132,7 +132,7 @@ namespace Nonlinear_Elasticity
   class Solid
   {
   public:
-    Solid(const std::string &case_path);
+    Solid(const std::string &case_path, const std::string &parameter_file);
 
     virtual ~Solid();
 

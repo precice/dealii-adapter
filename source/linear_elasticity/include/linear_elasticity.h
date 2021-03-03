@@ -55,7 +55,8 @@ namespace Linear_Elasticity
   class ElastoDynamics
   {
   public:
-    ElastoDynamics(const std::string &case_path);
+    ElastoDynamics(const std::string &case_path,
+                   const std::string &parameter_file);
 
     ~ElastoDynamics();
     // As usual in dealii, the run function covers the main time loop of the

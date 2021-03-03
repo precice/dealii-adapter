@@ -60,9 +60,9 @@ namespace Nonlinear_Elasticity
 
   // Constructor initializes member variables and reads the parameter file
   template <int dim, typename NumberType>
-  Solid<dim, NumberType>::Solid(const std::string &case_path)
-    : parameters(
-        Parameters::AllParameters(case_path + "nonlinear_elasticity.prm"))
+  Solid<dim, NumberType>::Solid(const std::string &case_path,
+                                const std::string &parameter_file)
+    : parameters(Parameters::AllParameters(parameter_file))
     , vol_reference(0.0)
     , vol_current(0.0)
     , triangulation(Triangulation<dim>::maximum_smoothing)

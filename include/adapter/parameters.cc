@@ -58,7 +58,7 @@ namespace Parameters
     {
       prm.add_parameter("Model",
                         model,
-                        "Solid model to be used: linear or neo-Hook",
+                        "Structural model to be used: linear or neo-Hook",
                         Patterns::Selection("linear|neo-Hook"));
 
       prm.add_parameter("Solver type",

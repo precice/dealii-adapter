@@ -52,8 +52,9 @@ namespace Linear_Elasticity
 
   // Constructor
   template <int dim>
-  ElastoDynamics<dim>::ElastoDynamics(const std::string &case_path)
-    : parameters(case_path + "linear_elasticity.prm")
+  ElastoDynamics<dim>::ElastoDynamics(const std::string &case_path,
+                                      const std::string &parameter_file)
+    : parameters(parameter_file)
     , interface_boundary_id(6)
     , dof_handler(triangulation)
     , fe(FE_Q<dim>(parameters.poly_degree), dim)
