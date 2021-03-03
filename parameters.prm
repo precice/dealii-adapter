@@ -33,6 +33,9 @@ subsection System properties
 end
 
 subsection Solver
+  # Structural model to be used: linear or neo-Hook
+  set Model                     = linear
+
   # Linear solver iterations (multiples of the system matrix size)
   set Max iteration multiplier  = 1
 

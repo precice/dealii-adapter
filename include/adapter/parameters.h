@@ -45,6 +45,7 @@ namespace Parameters
    */
   struct Solver
   {
+    std::string  model              = "linear";
     std::string  type_lin           = "Direct";
     double       tol_lin            = 1e-6;
     double       max_iterations_lin = 1;

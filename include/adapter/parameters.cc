@@ -56,6 +56,11 @@ namespace Parameters
   {
     prm.enter_subsection("Solver");
     {
+      prm.add_parameter("Model",
+                        model,
+                        "Solid model to be used: linear or neo-Hook",
+                        Patterns::Selection("linear|neo-Hook"));
+
       prm.add_parameter("Solver type",
                         type_lin,
                         "Linear solver: CG or Direct",
