@@ -47,10 +47,11 @@
 #include <deal.II/physics/elasticity/standard_tensors.h>
 #include <deal.II/physics/transformations.h>
 
+#include <adapter/parameters.h>
+
 #include <fstream>
 #include <iostream>
 
-#include "include/parameter_handling.h"
 #include "include/postprocessor.h"
 
 namespace Nonlinear_Elasticity

@@ -49,13 +49,13 @@
 #include <deal.II/physics/transformations.h>
 
 #include <adapter/adapter.h>
+#include <adapter/parameters.h>
 #include <adapter/time_handler.h>
 
 #include <fstream>
 #include <iostream>
 
 #include "compressible_neo_hook_material.h"
-#include "parameter_handling.h"
 #include "postprocessor.h"
 
 namespace Nonlinear_Elasticity

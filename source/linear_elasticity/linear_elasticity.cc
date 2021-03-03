@@ -36,12 +36,12 @@
 #include <deal.II/numerics/vector_tools.h>
 
 #include <adapter/adapter.h>
+#include <adapter/parameters.h>
 #include <adapter/time_handler.h>
 
 #include <fstream>
 #include <iostream>
 
-#include "include/parameter_handling.h"
 #include "include/postprocessor.h"
 
 // The Linear_Elasticity case includes a linear elastic material with a one-step
