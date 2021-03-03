@@ -16,15 +16,12 @@ namespace Parameters
    */
   struct Time
   {
-    double end_time;
-    double delta_t;
-    int    output_interval;
-
-    static void
-    declare_parameters(ParameterHandler &prm);
+    double end_time        = 1;
+    double delta_t         = 0.1;
+    int    output_interval = 1;
 
     void
-    parse_parameters(ParameterHandler &prm);
+    add_output_parameters(ParameterHandler &prm);
   };
 
   /**
@@ -32,18 +29,14 @@ namespace Parameters
    */
   struct System
   {
-    double               nu;
-    double               mu;
-    double               lambda;
-    double               rho;
+    double               nu     = 0.3;
+    double               mu     = 1538462;
+    double               lambda = 2307692;
+    double               rho    = 1000;
     Tensor<1, 3, double> body_force;
 
-
-    static void
-    declare_parameters(ParameterHandler &prm);
-
     void
-    parse_parameters(ParameterHandler &prm);
+    add_output_parameters(ParameterHandler &prm);
   };
 
 
@@ -52,18 +45,15 @@ namespace Parameters
    */
   struct Solver
   {
-    std::string  type_lin;
-    double       tol_lin;
-    double       max_iterations_lin;
-    unsigned int max_iterations_NR;
-    double       tol_f;
-    double       tol_u;
-
-    static void
-    declare_parameters(ParameterHandler &prm);
+    std::string  type_lin           = "Direct";
+    double       tol_lin            = 1e-6;
+    double       max_iterations_lin = 1;
+    unsigned int max_iterations_NR  = 10;
+    double       tol_f              = 1e-9;
+    double       tol_u              = 1e-6;
 
     void
-    parse_parameters(ParameterHandler &prm);
+    add_output_parameters(ParameterHandler &prm);
   };
 
 
@@ -74,18 +64,15 @@ namespace Parameters
    */
   struct Discretization
   {
-    unsigned int poly_degree;
+    unsigned int poly_degree = 3;
     // For the linear elastic model (theta-scheme)
-    double theta;
+    double theta = 0.5;
     // For the nonlinear elastic model (Newmark)
-    double beta;
-    double gamma ;
-
-    static void
-    declare_parameters(ParameterHandler &prm);
+    double beta  = 0.25;
+    double gamma = 0.5;
 
     void
-    parse_parameters(ParameterHandler &prm);
+    add_output_parameters(ParameterHandler &prm);
   };
 
 
@@ -96,20 +83,17 @@ namespace Parameters
    */
   struct PreciceAdapterConfiguration
   {
-    std::string scenario;
-    std::string config_file;
-    std::string participant_name;
-    std::string mesh_name;
-    std::string read_data_name;
-    std::string write_data_name;
-    double      flap_location;
-    bool        data_consistent;
-
-    static void
-    declare_parameters(ParameterHandler &prm);
+    std::string scenario         = "FSI3";
+    std::string config_file      = "precice-config.xml";
+    std::string participant_name = "dealiisolver";
+    std::string mesh_name        = "dealii-mesh";
+    std::string read_data_name   = "Stress";
+    std::string write_data_name  = "Displacement";
+    double      flap_location    = 0.0;
+    bool        data_consistent  = true;
 
     void
-    parse_parameters(ParameterHandler &prm);
+    add_output_parameters(ParameterHandler &prm);
   };
 
 
@@ -121,12 +105,6 @@ namespace Parameters
 
   {
     AllParameters(const std::string &input_file);
-
-    static void
-    declare_parameters(ParameterHandler &prm);
-
-    void
-    parse_parameters(ParameterHandler &prm);
   };
 } // namespace Parameters
 
