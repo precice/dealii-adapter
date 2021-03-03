@@ -33,7 +33,7 @@ subsection System properties
 end
 
 subsection Solver
-  # Structural model to be used: linear or neo-Hook
+  # Structural model to be used: linear or neo-Hooke
   set Model                     = linear
 
   # Linear solver iterations (multiples of the system matrix size)
