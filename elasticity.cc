@@ -56,7 +56,7 @@ main(int argc, char **argv)
       solver.add_output_parameters(prm);
       prm.parse_input(parameter_file, "", true);
 
-      if (solver.model == "neo-Hooke") // nonlinear
+      if (solver.model == "neo-Hookean") // nonlinear
         {
           Nonlinear_Elasticity::Solid<DIM> solid(case_path, parameter_file);
           solid.run();

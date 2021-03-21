@@ -58,39 +58,43 @@ namespace Parameters
     {
       prm.add_parameter("Model",
                         model,
-                        "Structural model to be used: linear or neo-Hooke",
-                        Patterns::Selection("linear|neo-Hooke"));
+                        "Structural model to be used: linear or neo-Hookean",
+                        Patterns::Selection("linear|neo-Hookean"));
 
       prm.add_parameter("Solver type",
                         type_lin,
                         "Linear solver: CG or Direct",
                         Patterns::Selection("CG|Direct"));
 
-      prm.add_parameter("Residual",
-                        tol_lin,
-                        "Linear solver residual (scaled by residual norm)",
-                        Patterns::Double(0.0));
+      prm.add_parameter(
+        "Residual",
+        tol_lin,
+        "CG solver residual (multiplied by residual norm, ignored if Model == linear)",
+        Patterns::Double(0.0));
 
       prm.add_parameter(
         "Max iteration multiplier",
         max_iterations_lin,
-        "Linear solver iterations (multiples of the system matrix size)",
+        "Max CG solver iterations (multiples of the system matrix size)",
         Patterns::Double(0.0));
 
-      prm.add_parameter("Max iterations Newton-Raphson",
-                        max_iterations_NR,
-                        "Number of Newton-Raphson iterations allowed",
-                        Patterns::Integer(0));
+      prm.add_parameter(
+        "Max iterations Newton-Raphson",
+        max_iterations_NR,
+        "Number of Newton-Raphson iterations allowed (ignored if Model == linear)",
+        Patterns::Integer(0));
 
-      prm.add_parameter("Tolerance force",
-                        tol_f,
-                        "Force residual tolerance",
-                        Patterns::Double(0.0));
+      prm.add_parameter(
+        "Tolerance force",
+        tol_f,
+        "Force residual tolerance for non-linear iteration (ignored if Model == linear)",
+        Patterns::Double(0.0));
 
-      prm.add_parameter("Tolerance displacement",
-                        tol_u,
-                        "Displacement error tolerance",
-                        Patterns::Double(0.0));
+      prm.add_parameter(
+        "Tolerance displacement",
+        tol_u,
+        "Displacement error tolerance for non-linear iteration (ignored if Model == linear)",
+        Patterns::Double(0.0));
     }
     prm.leave_subsection();
   }
@@ -190,6 +194,10 @@ namespace Parameters
     PreciceAdapterConfiguration::add_output_parameters(prm);
 
     prm.parse_input(input_file);
+
+    AssertThrow((data_consistent && model == "neo-Hookean") ||
+                  model == "linear",
+                ExcNotImplemented());
 
     // Optional, if we want to print all parameters in the beginning of the
     // simulation

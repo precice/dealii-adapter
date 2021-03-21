@@ -541,7 +541,7 @@ namespace Linear_Elasticity
 
         const int solver_its =
           system_matrix.m() * parameters.max_iterations_lin;
-        const double tol_sol = parameters.tol_lin * system_rhs.l2_norm();
+        const double tol_sol = 1.e-10;
 
         SolverControl         solver_control(solver_its, tol_sol);
         GrowingVectorMemory<> GVM;

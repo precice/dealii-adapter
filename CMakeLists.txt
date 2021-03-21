@@ -18,7 +18,7 @@ ENDIF()
 ADD_DEFINITIONS(-DDIM=${DIM})
 
 # Set the target and the target source
-SET( TARGET "dealii-precice" )
+SET( TARGET "elasticity" )
 SET( TARGET_SRC ${TARGET}.cc include/adapter/parameters.cc)
 
 DEAL_II_INITIALIZE_CACHED_VARIABLES()
