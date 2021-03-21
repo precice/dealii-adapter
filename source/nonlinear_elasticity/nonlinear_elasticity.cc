@@ -82,7 +82,13 @@ namespace Nonlinear_Elasticity
     , timer(std::cout, TimerOutput::summary, TimerOutput::wall_times)
     , time(parameters.end_time, parameters.delta_t)
     , adapter(parameters, boundary_interface_id)
-  {}
+  {
+    AssertThrow(
+      parameters.data_consistent,
+      ExcMessage(
+        "The neo-Hookean solid doesn't support 'Force' data reading. Please switch to 'Stress' "
+        "data on the Fluid side or use the linear model of the solid solver"));
+  }
 
   // Destructor clears the DoFHandler
   template <int dim, typename NumberType>
