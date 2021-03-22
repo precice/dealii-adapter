@@ -14,37 +14,46 @@ subsection Time
 end
 
 subsection Discretization
-  # Time integration scheme
-  # 0 = forward, 1 = backward
-  set theta               = 0.5
-
   # Polynomial degree of the FE system
   set Polynomial degree   = 3
 end
 
 subsection System properties
-  # mu (shear modulus)
-  set mu              = 0.5e6
+  # Poisson's ratio
+  set Poisson's ratio = 0.4
 
-  # lambda
-  set lambda          = 2e6
+  # Shear modulus
+  set Shear modulus   = 0.5e6
 
-  # density
-  set rho             = 1000
+  # Density
+  set rho	      = 1000
 
-  # body forces x,y,z
+  # Body forces x,y,z
   set body forces     = 0.0,0.0,0.0
 end
 
-subsection Linear solver
-  # Linear solver iterations (multiples of the system matrix size)
-  set Max iteration multiplier  = 1
-
-  # Linear solver residual (scaled by residual norm)
-  set Residual                  = 1e-6
+subsection Solver
+  # Structural model to be used: linear or neo-Hookean
+  set Model                     = linear
 
   # Linear solver: CG or Direct
   set Solver type               = Direct
+
+  # Max CG solver iterations (multiples of the system matrix size)
+  # In 2D, this value is best set at 2. In 3D, a value of 1 works fine.
+  set Max iteration multiplier  = 1
+
+  # Absolute CG solver residual (multiplied by residual norm, ignored if Model == linear)
+  set Residual                  = 1e-6
+
+  # Number of Newton-Raphson iterations allowed (ignored if Model == linear)
+  set Max iterations Newton-Raphson = 10
+
+  # Relative displacement error tolerance for non-linear iteration (ignored if Model == linear)
+  set Tolerance displacement        = 1.0e-6
+
+  # Relative force residual tolerance for non-linear iteration (ignored if Model == linear)
+  set Tolerance force               = 1.0e-9
 end
 
 subsection precice configuration
@@ -58,7 +67,7 @@ subsection precice configuration
   set Participant name    = Solid
 
   # Name of the coupling mesh in the precice-config.xml file
-  set Mesh name           = Solid_mesh
+  set Mesh name           = Solid-Mesh
 
   # Name of the read data in the precice-config.xml file
   set Read data name      = Stress

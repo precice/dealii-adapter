@@ -47,293 +47,22 @@
 #include <deal.II/physics/elasticity/standard_tensors.h>
 #include <deal.II/physics/transformations.h>
 
+#include <adapter/parameters.h>
+
 #include <fstream>
 #include <iostream>
 
-#include "include/parameter_handling.h"
 #include "include/postprocessor.h"
 
 namespace Nonlinear_Elasticity
 {
   using namespace dealii;
 
-  namespace Parameters
-  {
-    AllParameters::AllParameters(const std::string &input_file)
-    {
-      ParameterHandler prm;
-      declare_parameters(prm);
-      prm.parse_input(input_file);
-      parse_parameters(prm);
-
-      // Optional, if we want to print all parameters in the beginning of the
-      // simulation
-      //      prm.print_parameters(std::cout,ParameterHandler::Text);
-    }
-
-    void
-    Discretization::declare_parameters(ParameterHandler &prm)
-    {
-      prm.enter_subsection("Discretization");
-      {
-        prm.declare_entry("beta",
-                          "0.25",
-                          Patterns::Double(0, 0.5),
-                          "Newmark beta");
-
-        prm.declare_entry("gamma",
-                          "0.5",
-                          Patterns::Double(0, 1),
-                          "Newmark gamma");
-
-        prm.declare_entry("Polynomial degree",
-                          "3",
-                          Patterns::Integer(0),
-                          "Polynomial degree of the FE system");
-      }
-      prm.leave_subsection();
-    }
-
-    void
-    Discretization::parse_parameters(ParameterHandler &prm)
-    {
-      prm.enter_subsection("Discretization");
-      {
-        beta        = prm.get_double("beta");
-        gamma       = prm.get_double("gamma");
-        poly_degree = prm.get_integer("Polynomial degree");
-      }
-      prm.leave_subsection();
-    }
-
-    void
-    PreciceAdapterConfiguration::declare_parameters(ParameterHandler &prm)
-    {
-      prm.enter_subsection("precice configuration");
-      {
-        prm.declare_entry("Scenario",
-                          "FSI3",
-                          Patterns::Selection("FSI3|PF"),
-                          "Cases: FSI3 or PF for perpendicular flap");
-        prm.declare_entry("precice config-file",
-                          "precice-config.xml",
-                          Patterns::Anything(),
-                          "Name of the precice configuration file");
-        prm.declare_entry(
-          "Participant name",
-          "dealiisolver",
-          Patterns::Anything(),
-          "Name of the participant in the precice-config.xml file");
-        prm.declare_entry(
-          "Mesh name",
-          "dealii-mesh",
-          Patterns::Anything(),
-          "Name of the coupling mesh in the precice-config.xml file");
-        prm.declare_entry(
-          "Read data name",
-          "received-data",
-          Patterns::Anything(),
-          "Name of the read data in the precice-config.xml file");
-        prm.declare_entry(
-          "Write data name",
-          "calculated-data",
-          Patterns::Anything(),
-          "Name of the write data in the precice-config.xml file");
-        prm.declare_entry("Flap location",
-                          "0.0",
-                          Patterns::Double(-3, 3),
-                          "PF x-location");
-      }
-      prm.leave_subsection();
-    }
-
-    void
-    PreciceAdapterConfiguration::parse_parameters(ParameterHandler &prm)
-    {
-      prm.enter_subsection("precice configuration");
-      {
-        scenario         = prm.get("Scenario");
-        config_file      = prm.get("precice config-file");
-        participant_name = prm.get("Participant name");
-        mesh_name        = prm.get("Mesh name");
-        read_data_name   = prm.get("Read data name");
-        write_data_name  = prm.get("Write data name");
-        flap_location    = prm.get_double("Flap location");
-      }
-      prm.leave_subsection();
-    }
-
-    void
-    Time::declare_parameters(ParameterHandler &prm)
-    {
-      prm.enter_subsection("Time");
-      {
-        prm.declare_entry("End time", "1", Patterns::Double(), "End time");
-
-        prm.declare_entry("Time step size",
-                          "0.1",
-                          Patterns::Double(),
-                          "Time step size");
-
-        prm.declare_entry("Output interval",
-                          "1",
-                          Patterns::Integer(),
-                          "Output interval");
-      }
-      prm.leave_subsection();
-    }
-
-    void
-    Time::parse_parameters(ParameterHandler &prm)
-    {
-      prm.enter_subsection("Time");
-      {
-        end_time        = prm.get_double("End time");
-        delta_t         = prm.get_double("Time step size");
-        output_interval = prm.get_integer("Output interval");
-      }
-      prm.leave_subsection();
-    }
-
-    void
-    NonlinearSolver::declare_parameters(ParameterHandler &prm)
-    {
-      prm.enter_subsection("Nonlinear solver");
-      {
-        prm.declare_entry("Max iterations Newton-Raphson",
-                          "10",
-                          Patterns::Integer(0),
-                          "Number of Newton-Raphson iterations allowed");
-
-        prm.declare_entry("Tolerance force",
-                          "1.0e-9",
-                          Patterns::Double(0.0),
-                          "Force residual tolerance");
-
-        prm.declare_entry("Tolerance displacement",
-                          "1.0e-6",
-                          Patterns::Double(0.0),
-                          "Displacement error tolerance");
-      }
-      prm.leave_subsection();
-    }
-
-    void
-    NonlinearSolver::parse_parameters(ParameterHandler &prm)
-    {
-      prm.enter_subsection("Nonlinear solver");
-      {
-        max_iterations_NR = prm.get_integer("Max iterations Newton-Raphson");
-        tol_f             = prm.get_double("Tolerance force");
-        tol_u             = prm.get_double("Tolerance displacement");
-      }
-      prm.leave_subsection();
-    }
-
-    void
-    LinearSolver::declare_parameters(ParameterHandler &prm)
-    {
-      prm.enter_subsection("Linear solver");
-      {
-        prm.declare_entry("Solver type",
-                          "CG",
-                          Patterns::Selection("CG|Direct"),
-                          "Linear solver: CG or Direct");
-
-        prm.declare_entry("Residual",
-                          "1e-6",
-                          Patterns::Double(0.0),
-                          "Linear solver residual (scaled by residual norm)");
-
-        prm.declare_entry(
-          "Max iteration multiplier",
-          "1",
-          Patterns::Double(0.0),
-          "Linear solver iterations (multiples of the system matrix size)");
-      }
-      prm.leave_subsection();
-    }
-    void
-    System::declare_parameters(ParameterHandler &prm)
-    {
-      prm.enter_subsection("System properties");
-      {
-        prm.declare_entry("Poisson's ratio",
-                          "0.3",
-                          Patterns::Double(-1.0, 0.5),
-                          "Poisson's ratio");
-
-        prm.declare_entry("Shear modulus",
-                          "0.4225e6",
-                          Patterns::Double(),
-                          "Shear modulus");
-
-        prm.declare_entry("rho", "1000", Patterns::Double(), "rho");
-
-        prm.declare_entry("body forces",
-                          "0,0,0",
-                          Patterns::List(Patterns::Double()),
-                          "body forces x,y,z");
-      }
-      prm.leave_subsection();
-    }
-
-    void
-    System::parse_parameters(ParameterHandler &prm)
-    {
-      prm.enter_subsection("System properties");
-      {
-        nu  = prm.get_double("Poisson's ratio");
-        mu  = prm.get_double("Shear modulus");
-        rho = prm.get_double("rho");
-        const std::vector<std::string> body_forces_input =
-          Utilities::split_string_list(prm.get("body forces"));
-        for (uint d = 0; d < 3; ++d)
-          body_force[d] = Utilities::string_to_double(body_forces_input[d]);
-      }
-      prm.leave_subsection();
-    }
-
-    void
-    LinearSolver::parse_parameters(ParameterHandler &prm)
-    {
-      prm.enter_subsection("Linear solver");
-      {
-        type_lin           = prm.get("Solver type");
-        tol_lin            = prm.get_double("Residual");
-        max_iterations_lin = prm.get_double("Max iteration multiplier");
-      }
-      prm.leave_subsection();
-    }
-  } // namespace Parameters
-
-  void
-  Parameters::AllParameters::declare_parameters(ParameterHandler &prm)
-  {
-    System::declare_parameters(prm);
-    LinearSolver::declare_parameters(prm);
-    NonlinearSolver::declare_parameters(prm);
-    Time::declare_parameters(prm);
-    Discretization::declare_parameters(prm);
-    PreciceAdapterConfiguration::declare_parameters(prm);
-  }
-
-  void
-  Parameters::AllParameters::parse_parameters(ParameterHandler &prm)
-  {
-    System::parse_parameters(prm);
-    LinearSolver::parse_parameters(prm);
-    NonlinearSolver::parse_parameters(prm);
-    Time::parse_parameters(prm);
-    Discretization::parse_parameters(prm);
-    PreciceAdapterConfiguration::parse_parameters(prm);
-  }
-
   // Constructor initializes member variables and reads the parameter file
   template <int dim, typename NumberType>
-  Solid<dim, NumberType>::Solid(const std::string &case_path)
-    : parameters(
-        Parameters::AllParameters(case_path + "nonlinear_elasticity.prm"))
+  Solid<dim, NumberType>::Solid(const std::string &case_path,
+                                const std::string &parameter_file)
+    : parameters(Parameters::AllParameters(parameter_file))
     , vol_reference(0.0)
     , vol_current(0.0)
     , triangulation(Triangulation<dim>::maximum_smoothing)
@@ -353,7 +82,13 @@ namespace Nonlinear_Elasticity
     , timer(std::cout, TimerOutput::summary, TimerOutput::wall_times)
     , time(parameters.end_time, parameters.delta_t)
     , adapter(parameters, boundary_interface_id)
-  {}
+  {
+    AssertThrow(
+      parameters.data_consistent,
+      ExcMessage(
+        "The neo-Hookean solid doesn't support 'Force' data reading. Please switch to 'Stress' "
+        "data on the Fluid side or use the linear model of the solid solver"));
+  }
 
   // Destructor clears the DoFHandler
   template <int dim, typename NumberType>

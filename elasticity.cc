@@ -1,3 +1,5 @@
+#include <adapter/parameters.h>
+
 #include "source/linear_elasticity/include/linear_elasticity.h"
 #include "source/nonlinear_elasticity/include/nonlinear_elasticity.h"
 
@@ -40,32 +42,33 @@ main(int argc, char **argv)
         << std::endl
         << std::endl;
 
-
-      std::string parameter_file;
-      if (argc > 1)
-        parameter_file = argv[2];
-      else
-        parameter_file = "nonlinear_elasticity.prm";
+      // Store the name of the parameter file
+      const std::string parameter_file = argc > 1 ? argv[1] : "parameters.prm";
 
       // Extract case path for the output directory
       size_t      pos = parameter_file.find_last_of("/");
       std::string case_path =
         std::string::npos == pos ? "" : parameter_file.substr(0, pos + 1);
 
-      std::string solver_type = argv[1];
-      // Dimension is determinded via cmake -DDIM
-      if (solver_type == "-nonlinear") // nonlinear
+      // Query solver type from the parameter file
+      ParameterHandler   prm;
+      Parameters::Solver solver;
+      solver.add_output_parameters(prm);
+      prm.parse_input(parameter_file, "", true);
+
+      if (solver.model == "neo-Hookean") // nonlinear
         {
-          Nonlinear_Elasticity::Solid<DIM> solid(case_path);
+          Nonlinear_Elasticity::Solid<DIM> solid(case_path, parameter_file);
           solid.run();
         }
-      else if (solver_type == "-linear") // linear
+      else if (solver.model == "linear") // linear
         {
-          Linear_Elasticity::ElastoDynamics<DIM> elastic_solver(case_path);
+          Linear_Elasticity::ElastoDynamics<DIM> elastic_solver(case_path,
+                                                                parameter_file);
           elastic_solver.run();
         }
       else
-        AssertThrow(false, ExcMessage("Unknown solver specified. "))
+        AssertThrow(false, ExcNotImplemented())
     }
   catch (std::exception &exc)
     {
