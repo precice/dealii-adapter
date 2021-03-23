@@ -1,5 +1,4 @@
-#ifndef COMPRESSIBLE_NEO_HOOK_MATERIAL_H
-#define COMPRESSIBLE_NEO_HOOK_MATERIAL_H
+#pragma once
 
 #include <deal.II/physics/elasticity/standard_tensors.h>
 
@@ -139,4 +138,3 @@ namespace Nonlinear_Elasticity
     }
   };
 } // namespace Nonlinear_Elasticity
-#endif // COMPRESSIBLE_NEO_HOOK_MATERIAL_H

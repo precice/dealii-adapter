@@ -9,10 +9,10 @@
 #include <deal.II/fe/fe.h>
 #include <deal.II/fe/mapping_q1.h>
 
+#include <adapter/dof_tools_extension.h>
+#include <adapter/time_handler.h>
 #include <precice/SolverInterface.hpp>
 
-#include "dof_tools_extension.h"
-#include "time.h"
 
 namespace Adapter
 {

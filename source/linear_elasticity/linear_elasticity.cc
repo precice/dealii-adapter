@@ -1,3 +1,5 @@
+#include "include/linear_elasticity.h"
+
 #include <deal.II/base/function.h>
 #include <deal.II/base/parameter_handler.h>
 #include <deal.II/base/quadrature_lib.h>
@@ -33,12 +35,13 @@
 #include <deal.II/numerics/matrix_tools.h>
 #include <deal.II/numerics/vector_tools.h>
 
+#include <adapter/adapter.h>
+#include <adapter/parameters.h>
+#include <adapter/time_handler.h>
+
 #include <fstream>
 #include <iostream>
 
-#include "../adapter/adapter.h"
-#include "../adapter/time.h"
-#include "include/parameter_handling.h"
 #include "include/postprocessor.h"
 
 // The Linear_Elasticity case includes a linear elastic material with a one-step
@@ -47,111 +50,11 @@ namespace Linear_Elasticity
 {
   using namespace dealii;
 
-  template <int dim>
-  class ElastoDynamics
-  {
-  public:
-    ElastoDynamics(const std::string &case_path);
-    ~ElastoDynamics();
-    // As usual in dealii, the run function covers the main time loop of the
-    // system
-    void
-    run();
-
-  private:
-    // Create the mesh and set boundary IDs for different boundary conditions
-    void
-    make_grid();
-
-    // Set up the FE system and allocate data structures
-    void
-    setup_system();
-
-    // Compute time invariant matrices e.g. stiffness matrix and mass matrix
-    void
-    assemble_system();
-
-    // Assemble the Neumann contribution i.e. the coupling data obtained from
-    // the Fluid participant
-    void
-    assemble_rhs();
-
-    void
-    assemble_consistent_loading();
-
-    // Solve the linear system
-    void
-    solve();
-
-    // Update the displacement according to the theta scheme
-    void
-    update_displacement();
-
-    // Output results to vtk files
-    void
-    output_results() const;
-
-    // Paramter class parsing all user specific input parameters
-    const Parameters::AllParameters parameters;
-
-    // Boundary IDs, reserved for the respectve application
-    unsigned int       clamped_mesh_id;
-    unsigned int       out_of_plane_clamped_mesh_id;
-    const unsigned int interface_boundary_id;
-
-    // Dealii typical objects
-    Triangulation<dim>   triangulation;
-    DoFHandler<dim>      dof_handler;
-    FESystem<dim>        fe;
-    MappingQGeneric<dim> mapping;
-    const unsigned int   quad_order;
-
-    AffineConstraints<double> hanging_node_constraints;
-
-    // Matrices used during computations
-    SparsityPattern      sparsity_pattern;
-    SparseMatrix<double> mass_matrix;
-    SparseMatrix<double> stiffness_matrix;
-    SparseMatrix<double> system_matrix;
-    SparseMatrix<double> stepping_matrix;
-
-    // Time dependent variables
-    Vector<double> old_velocity;
-    Vector<double> velocity;
-    Vector<double> old_displacement;
-    Vector<double> displacement;
-    Vector<double> old_stress;
-    Vector<double> stress;
-    Vector<double> system_rhs;
-
-    // Body forces e.g. gravity. Values are specified in the input file
-    const bool     body_force_enabled;
-    Vector<double> body_force_vector;
-
-    // In order to measure some timings
-    mutable TimerOutput timer;
-
-    // The main adapter objects: The time class keeps track of the current time
-    // and time steps. The Adapter class includes all functionalities for
-    // coupling via preCICE. Look at the documentation of the class for more
-    // information.
-    Adapter::Time                                                    time;
-    Adapter::Adapter<dim, Vector<double>, Parameters::AllParameters> adapter;
-
-    // Alias for all time dependent variables, which should be saved/reloaded
-    // in case of an implicit coupling. This vector is directly used in the
-    // Adapter class
-    std::vector<Vector<double> *> state_variables;
-    // for the output directory
-    const std::string case_path;
-  };
-
-
-
   // Constructor
   template <int dim>
-  ElastoDynamics<dim>::ElastoDynamics(const std::string &case_path)
-    : parameters(case_path + "linear_elasticity.prm")
+  ElastoDynamics<dim>::ElastoDynamics(const std::string &case_path,
+                                      const std::string &parameter_file)
+    : parameters(parameter_file)
     , interface_boundary_id(6)
     , dof_handler(triangulation)
     , fe(FE_Q<dim>(parameters.poly_degree), dim)
@@ -638,7 +541,7 @@ namespace Linear_Elasticity
 
         const int solver_its =
           system_matrix.m() * parameters.max_iterations_lin;
-        const double tol_sol = parameters.tol_lin * system_rhs.l2_norm();
+        const double tol_sol = 1.e-10;
 
         SolverControl         solver_control(solver_its, tol_sol);
         GrowingVectorMemory<> GVM;
@@ -807,82 +710,6 @@ namespace Linear_Elasticity
     // communication etc.
     adapter.precice.finalize();
   }
+
+  template class ElastoDynamics<DIM>;
 } // namespace Linear_Elasticity
-
-int
-main(int argc, char **argv)
-{
-  using namespace Linear_Elasticity;
-  using namespace dealii;
-
-#ifdef DEAL_II_WITH_MPI
-  Utilities::MPI::MPI_InitFinalize mpi_initialization(argc, argv);
-#endif
-
-  try
-    {
-      // Query adapter and deal.II info
-      const std::string adapter_info =
-        GIT_SHORTREV == std::string("") ?
-          "unknown" :
-          (GIT_SHORTREV + std::string(" on branch ") + GIT_BRANCH);
-      const std::string dealii_info =
-        DEAL_II_GIT_SHORTREV == std::string("") ?
-          "unknown" :
-          (DEAL_II_GIT_SHORTREV + std::string(" on branch ") +
-           DEAL_II_GIT_BRANCH);
-
-      std::cout
-        << "-----------------------------------------------------------------------------"
-        << std::endl;
-      std::cout << "--     . adapter revision " << adapter_info << std::endl;
-      std::cout << "--     . deal.II " << DEAL_II_PACKAGE_VERSION
-                << " (revision " << dealii_info << ")" << std::endl;
-      std::cout
-        << "-----------------------------------------------------------------------------"
-        << std::endl
-        << std::endl;
-
-      std::string parameter_file;
-      if (argc > 1)
-        parameter_file = argv[1];
-      else
-        parameter_file = "linear_elasticity.prm";
-
-      // Extract case path for the output directory
-      size_t      pos = parameter_file.find_last_of("/");
-      std::string case_path =
-        std::string::npos == pos ? "" : parameter_file.substr(0, pos + 1);
-
-      ElastoDynamics<DIM> elastic_solver(case_path);
-      elastic_solver.run();
-    }
-  catch (std::exception &exc)
-    {
-      std::cerr << std::endl
-                << std::endl
-                << "----------------------------------------------------"
-                << std::endl;
-      std::cerr << "Exception on processing: " << std::endl
-                << exc.what() << std::endl
-                << "Aborting!" << std::endl
-                << "----------------------------------------------------"
-                << std::endl;
-
-      return 1;
-    }
-  catch (...)
-    {
-      std::cerr << std::endl
-                << std::endl
-                << "----------------------------------------------------"
-                << std::endl;
-      std::cerr << "Unknown exception!" << std::endl
-                << "Aborting!" << std::endl
-                << "----------------------------------------------------"
-                << std::endl;
-      return 1;
-    }
-
-  return 0;
-}
