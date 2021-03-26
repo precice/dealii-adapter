@@ -18,6 +18,10 @@ namespace Parameters
                         output_interval,
                         "Write results every x timesteps",
                         Patterns::Integer(0));
+      prm.add_parameter("Output folder",
+                        output_folder,
+                        "Output folder",
+                        Patterns::Anything());
     }
     prm.leave_subsection();
   }
