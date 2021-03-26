@@ -60,8 +60,7 @@ namespace Nonlinear_Elasticity
 
   // Constructor initializes member variables and reads the parameter file
   template <int dim, typename NumberType>
-  Solid<dim, NumberType>::Solid(const std::string &case_path,
-                                const std::string &parameter_file)
+  Solid<dim, NumberType>::Solid(const std::string &parameter_file)
     : parameters(Parameters::AllParameters(parameter_file))
     , vol_reference(0.0)
     , vol_current(0.0)
@@ -78,7 +77,6 @@ namespace Nonlinear_Elasticity
     , n_q_points(qf_cell.size())
     , n_q_points_f(qf_face.size())
     , boundary_interface_id(7)
-    , case_path(case_path)
     , timer(std::cout, TimerOutput::summary, TimerOutput::wall_times)
     , time(parameters.end_time, parameters.delta_t)
     , adapter(parameters, boundary_interface_id)
@@ -1223,12 +1221,19 @@ namespace Nonlinear_Elasticity
 
     data_out.build_patches(q_mapping, degree, DataOut<dim>::curved_boundary);
 
-    std::ostringstream filename;
-    filename << case_path << "solution-"
-             << time.get_timestep() / parameters.output_interval << ".vtk";
-
-    std::ofstream output(filename.str().c_str());
+    std::ofstream output(
+      parameters.output_folder + "/solution-" +
+      Utilities::int_to_string(time.get_timestep() / parameters.output_interval,
+                               3) +
+      ".vtk");
     data_out.write_vtk(output);
+    std::cout << "\t Output written to solution-" +
+                   Utilities::int_to_string(time.get_timestep() /
+                                              parameters.output_interval,
+                                            3) +
+                   ".vtk \n"
+              << std::endl;
+
     timer.leave_subsection("Output results");
   }
 

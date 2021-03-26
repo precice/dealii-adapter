@@ -52,8 +52,7 @@ namespace Linear_Elasticity
 
   // Constructor
   template <int dim>
-  ElastoDynamics<dim>::ElastoDynamics(const std::string &case_path,
-                                      const std::string &parameter_file)
+  ElastoDynamics<dim>::ElastoDynamics(const std::string &parameter_file)
     : parameters(parameter_file)
     , interface_boundary_id(6)
     , dof_handler(triangulation)
@@ -64,7 +63,6 @@ namespace Linear_Elasticity
     , timer(std::cout, TimerOutput::summary, TimerOutput::wall_times)
     , time(parameters.end_time, parameters.delta_t)
     , adapter(parameters, interface_boundary_id)
-    , case_path(case_path)
   {}
 
 
@@ -616,24 +614,16 @@ namespace Linear_Elasticity
                            parameters.poly_degree,
                            DataOut<dim>::curved_boundary);
 
-    // Check, if the output directory exists
-    std::ifstream output_directory(case_path + "dealii_output");
-    AssertThrow(
-      output_directory,
-      ExcMessage(
-        "Unable to find the output directory. "
-        "By default, this program stores result files in a directory called dealii_output. "
-        "This needs to be located in your case directory, where the parameter file is located as well."));
-
-    // Store all files in a seperate folder called dealii_ouput
     std::ofstream output(
-      case_path + "dealii_output/solution-" +
-      std::to_string(time.get_timestep() / parameters.output_interval) +
+      parameters.output_folder + "/solution-" +
+      Utilities::int_to_string(time.get_timestep() / parameters.output_interval,
+                               3) +
       ".vtk");
     data_out.write_vtk(output);
     std::cout << "\t Output written to solution-" +
-                   std::to_string(time.get_timestep() /
-                                  parameters.output_interval) +
+                   Utilities::int_to_string(time.get_timestep() /
+                                              parameters.output_interval,
+                                            3) +
                    ".vtk \n"
               << std::endl;
     timer.leave_subsection("Output results");

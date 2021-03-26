@@ -132,7 +132,7 @@ namespace Nonlinear_Elasticity
   class Solid
   {
   public:
-    Solid(const std::string &case_path, const std::string &parameter_file);
+    Solid(const std::string &parameter_file);
 
     virtual ~Solid();
 
@@ -255,9 +255,6 @@ namespace Nonlinear_Elasticity
     // Clamped boundary ID to be used consistently
     const unsigned int clamped_boundary_id          = 1;
     const unsigned int out_of_plane_clamped_mesh_id = 8;
-
-    // ..and store the directory, in order to output the result files there
-    const std::string case_path;
 
     AffineConstraints<double> constraints;
     BlockSparsityPattern      sparsity_pattern;

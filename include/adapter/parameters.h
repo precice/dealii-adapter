@@ -16,9 +16,11 @@ namespace Parameters
    */
   struct Time
   {
-    double end_time        = 1;
-    double delta_t         = 0.1;
-    int    output_interval = 1;
+    double      end_time        = 1;
+    double      delta_t         = 0.1;
+    int         output_interval = 1;
+    std::string output_folder   = "";
+
 
     void
     add_output_parameters(ParameterHandler &prm);
