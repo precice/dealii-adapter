@@ -55,8 +55,7 @@ namespace Linear_Elasticity
   class ElastoDynamics
   {
   public:
-    ElastoDynamics(const std::string &case_path,
-                   const std::string &parameter_file);
+    ElastoDynamics(const std::string &parameter_file);
 
     ~ElastoDynamics();
     // As usual in dealii, the run function covers the main time loop of the
@@ -148,8 +147,6 @@ namespace Linear_Elasticity
     // in case of an implicit coupling. This vector is directly used in the
     // Adapter class
     std::vector<Vector<double> *> state_variables;
-    // for the output directory
-    const std::string case_path;
   };
 } // namespace Linear_Elasticity
 
