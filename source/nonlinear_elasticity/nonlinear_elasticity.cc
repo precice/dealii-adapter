@@ -170,8 +170,6 @@ namespace Nonlinear_Elasticity
       ExcMessage(
         "Setting body forces in z-direction for a two dimensional simulation has no effect"));
 
-    const std::string testcase(parameters.scenario);
-
     Point<dim>   point_bottom, point_tip;
     unsigned int id_flap_long_bottom, id_flap_long_top, id_flap_short_bottom,
       id_flap_short_top, n_x, n_y, n_z;
@@ -180,17 +178,17 @@ namespace Nonlinear_Elasticity
     if (parameters.scenario == "FSI3")
       {
         // FSI 3
-        n_x          = 18;
-        n_y          = 3;
-        n_z          = 1;
-        point_bottom = dim == 3 ? Point<dim>(0.24899, 0.19, -0.005) :
+        n_x          = 60;
+        n_y          = 1;
+        n_z          = 5;
+        point_bottom = dim == 3 ? Point<dim>(0.24899,0.009, 0.19) :
                                   Point<dim>(0.24899, 0.19);
         point_tip =
-          dim == 3 ? Point<dim>(0.6, 0.21, 0.005) : Point<dim>(0.6, 0.21);
+          dim == 3 ? Point<dim>(0.6, 0.01, 0.21) : Point<dim>(0.6, 0.21);
 
         // IDs for FSI3
-        id_flap_long_bottom  = 2; // x direction
-        id_flap_long_top     = 3;
+        id_flap_long_bottom  = 5; // x direction
+        id_flap_long_top     = 4;
         id_flap_short_bottom = 0; // y direction
         id_flap_short_top    = 1;
       }
@@ -217,8 +215,8 @@ namespace Nonlinear_Elasticity
       }
 
     // Same for both scenarios, only relevant for quasi-2D
-    const unsigned int id_flap_out_of_plane_bottom = 4; // z direction
-    const unsigned int id_flap_out_of_plane_top    = 5;
+    const unsigned int id_flap_out_of_plane_bottom = 2; // z direction
+    const unsigned int id_flap_out_of_plane_top    = 3;
 
     const std::vector<unsigned int> repetitions =
       dim == 2 ? std::vector<unsigned int>({n_x, n_y}) :
