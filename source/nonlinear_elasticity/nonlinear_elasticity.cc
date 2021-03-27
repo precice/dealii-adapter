@@ -1110,7 +1110,7 @@ namespace Nonlinear_Elasticity
         // The FEValuesExtractors allow to fix only a certain direction, in this
         // case the z-direction
         const unsigned int boundary_id = out_of_plane_clamped_mesh_id;
-        const FEValuesExtractors::Scalar z_displacement(2);
+        const FEValuesExtractors::Scalar y_displacement(1);
 
         if (apply_dirichlet_bc == true)
           VectorTools::interpolate_boundary_values(
@@ -1118,14 +1118,14 @@ namespace Nonlinear_Elasticity
             boundary_id,
             Functions::ZeroFunction<dim>(n_components),
             constraints,
-            fe.component_mask(z_displacement));
+            fe.component_mask(y_displacement));
         else
           VectorTools::interpolate_boundary_values(
             dof_handler_ref,
             boundary_id,
             Functions::ZeroFunction<dim>(n_components),
             constraints,
-            fe.component_mask(z_displacement));
+            fe.component_mask(y_displacement));
       }
 
     constraints.close();
