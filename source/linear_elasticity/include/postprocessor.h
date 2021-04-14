@@ -1,11 +1,10 @@
-#ifndef POSTPROCESSOR_H
-#define POSTPROCESSOR_H
+#pragma once
 
 #include <deal.II/numerics/data_postprocessor.h>
 
 // Calculate Strains and pass displacement to the dof_handler
 // TODO: Strains are symmetric. Currently all tensor components are processed
-namespace Nonlinear_Elasticity
+namespace Linear_Elasticity
 {
   using namespace dealii;
   /**
@@ -121,5 +120,4 @@ namespace Nonlinear_Elasticity
     return update_values | update_gradients;
   }
 
-} // namespace Nonlinear_Elasticity
-#endif // POSTPROCESSOR_H
+} // namespace Linear_Elasticity

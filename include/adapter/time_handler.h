@@ -1,5 +1,5 @@
-#ifndef TIME_H
-#define TIME_H
+#ifndef TIME_HANDLER_H
+#define TIME_HANDLER_H
 
 #include <deal.II/base/timer.h>
 
@@ -81,4 +81,4 @@ namespace Adapter
     const double delta_t;
   };
 } // namespace Adapter
-#endif // TIME_H
+#endif // TIME_HANDLER_H

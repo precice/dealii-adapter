@@ -9,9 +9,10 @@
 #include <deal.II/fe/fe.h>
 #include <deal.II/fe/mapping_q1.h>
 
+#include <adapter/dof_tools_extension.h>
+#include <adapter/time_handler.h>
 #include <precice/SolverInterface.hpp>
 
-#include "time.h"
 
 namespace Adapter
 {
@@ -295,9 +296,14 @@ namespace Adapter
 
     // We use here a simple Q1 mapping. In case one has more complex
     // geomtries, you might want to change this to a higher order mapping.
-    DoFTools::map_dofs_to_support_points(MappingQ1<dim>(),
-                                         dof_handler,
-                                         support_points);
+    // We only need to map the first component for a dim dimensional problem
+
+    DoFTools::map_boundary_dofs_to_support_points(
+      StaticMappingQ1<dim>::mapping,
+      dof_handler,
+      support_points,
+      dof_handler.get_fe().component_mask(x_displacement),
+      deal_boundary_interface_id);
 
     // support_points contains now the coordinates of all dofs
     // in the next step, the relevant coordinates are extracted using the
@@ -336,9 +342,9 @@ namespace Adapter
 
         precice.markActionFulfilled(
           precice::constants::actionWriteInitialData());
-
-        precice.initializeData();
       }
+
+    precice.initializeData();
 
     // read initial readData from preCICE if required for the first time step
     if (precice.isReadDataAvailable())
