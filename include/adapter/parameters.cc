@@ -50,8 +50,6 @@ namespace Parameters
                         Patterns::List(Patterns::Double()));
     }
     prm.leave_subsection();
-
-    lambda = 2 * mu * nu / (1 - 2 * nu);
   }
 
 
@@ -187,6 +185,8 @@ namespace Parameters
     PreciceAdapterConfiguration::add_output_parameters(prm);
 
     prm.parse_input(input_file);
+
+    lambda = 2 * mu * nu / (1 - 2 * nu);
 
     // Look at the specific type of read data
     if ((read_data_name.find("Stress") == 0))
