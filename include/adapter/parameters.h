@@ -33,7 +33,7 @@ namespace Parameters
   {
     double               nu     = 0.3;
     double               mu     = 1538462;
-    double               lambda = 2307692;
+    double               lambda = -1;
     double               rho    = 1000;
     Tensor<1, 3, double> body_force;
 
