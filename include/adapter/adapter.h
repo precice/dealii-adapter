@@ -248,29 +248,30 @@ namespace Adapter
 
     const FEValuesExtractors::Scalar x_displacement(0);
 
-    DoFTools::extract_boundary_dofs(dof_handler,
-                                    dof_handler.get_fe().component_mask(
-                                      x_displacement),
-                                    coupling_dofs_x_comp,
-                                    couplingBoundary);
+    coupling_dofs_x_comp =
+      DoFTools::extract_boundary_dofs(dof_handler,
+                                      dof_handler.get_fe().component_mask(
+                                        x_displacement),
+                                      couplingBoundary);
 
     // The dofs related to the y-component are needed as well. See also
     // comment below, why this is necessary.
     const FEValuesExtractors::Scalar y_displacement(1);
 
-    DoFTools::extract_boundary_dofs(dof_handler,
-                                    dof_handler.get_fe().component_mask(
-                                      y_displacement),
-                                    coupling_dofs_y_comp,
-                                    couplingBoundary);
+    coupling_dofs_y_comp =
+      DoFTools::extract_boundary_dofs(dof_handler,
+                                      dof_handler.get_fe().component_mask(
+                                        y_displacement),
+                                      couplingBoundary);
     if (dim == 3)
       {
         const FEValuesExtractors::Scalar z_displacement(2);
-        DoFTools::extract_boundary_dofs(dof_handler,
-                                        dof_handler.get_fe().component_mask(
-                                          z_displacement),
-                                        coupling_dofs_z_comp,
-                                        couplingBoundary);
+
+        coupling_dofs_z_comp =
+          DoFTools::extract_boundary_dofs(dof_handler,
+                                          dof_handler.get_fe().component_mask(
+                                            z_displacement),
+                                          couplingBoundary);
       }
 
     n_interface_nodes = coupling_dofs_x_comp.n_elements();
