@@ -140,8 +140,8 @@ namespace Linear_Elasticity
     // and time steps. The Adapter class includes all functionalities for
     // coupling via preCICE. Look at the documentation of the class for more
     // information.
-    Adapter::Time                                                    time;
-    Adapter::Adapter<dim, Vector<double>, Parameters::AllParameters> adapter;
+    Adapter::Time                              time;
+    Adapter::Adapter<dim, dim, Vector<double>> adapter;
 
     // Alias for all time dependent variables, which should be saved/reloaded
     // in case of an implicit coupling. This vector is directly used in the

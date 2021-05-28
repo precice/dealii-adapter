@@ -23,7 +23,7 @@ namespace Adapter
    * solvers with preCICE i.e. data structures are set up, necessary information
    * is passed to preCICE etc.
    */
-  template <int dim, typename VectorType, typename ParameterClass>
+  template <int dim, int data_dim, typename VectorType>
   class Adapter
   {
   public:
@@ -35,6 +35,7 @@ namespace Adapter
      * @param[in]  deal_boundary_interface_id Boundary ID of the triangulation,
      *             which is associated with the coupling interface.
      */
+    template <typename ParameterClass>
     Adapter(const ParameterClass &parameters,
             const unsigned int    deal_boundary_interface_id);
 
@@ -201,8 +202,9 @@ namespace Adapter
 
 
 
-  template <int dim, typename VectorType, typename ParameterClass>
-  Adapter<dim, VectorType, ParameterClass>::Adapter(
+  template <int dim, int data_dim, typename VectorType>
+  template <typename ParameterClass>
+  Adapter<dim, data_dim, VectorType>::Adapter(
     const ParameterClass &parameters,
     const unsigned int    deal_boundary_interface_id)
     : precice(parameters.participant_name,
@@ -217,9 +219,9 @@ namespace Adapter
 
 
 
-  template <int dim, typename VectorType, typename ParameterClass>
+  template <int dim, int data_dim, typename VectorType>
   void
-  Adapter<dim, VectorType, ParameterClass>::initialize(
+  Adapter<dim, data_dim, VectorType>::initialize(
     const DoFHandler<dim> &dof_handler,
     const VectorType &     deal_to_precice,
     VectorType &           precice_to_deal)
@@ -244,32 +246,32 @@ namespace Adapter
     // Therefore, we extract one component of the vector valued dofs and store
     // them in an IndexSet
     std::set<types::boundary_id> couplingBoundary{deal_boundary_interface_id};
-    // Return by value for newer deal.II versions
+
 #if DEAL_II_VERSION_GTE(9, 3, 0)
     auto get_component_dofs = [&](const int component) {
       const FEValuesExtractors::Scalar component_dofs(component);
       return DoFTools::extract_boundary_dofs(
         dof_handler,
         dof_handler.get_fe().component_mask(component_dofs),
-        couplingBoundary);
+                                    couplingBoundary);
     };
-    coupling_dofs_x_comp = get_component_dofs(0);
-    coupling_dofs_y_comp = get_component_dofs(1);
-    if (dim == 3)
-      coupling_dofs_z_comp = get_component_dofs(2);
+    for( int d = 0; d < data_dim; ++d)
+     coupling_dofs_x_comp = get_component_dofs(d);
 #else
-    // Return by argument for older deal.II versions
+
     auto get_component_dofs = [&](const int component, auto &dof_index_set) {
       const FEValuesExtractors::Scalar component_dofs(component);
-      DoFTools::extract_boundary_dofs(dof_handler,
-                                      dof_handler.get_fe().component_mask(
+    DoFTools::extract_boundary_dofs(dof_handler,
+                                    dof_handler.get_fe().component_mask(
                                         component_dofs),
                                       dof_index_set,
-                                      couplingBoundary);
+                                    couplingBoundary);
     };
     get_component_dofs(0, coupling_dofs_x_comp);
-    get_component_dofs(1, coupling_dofs_y_comp);
-    if (dim == 3)
+    
+    if(data_dim>1)
+      get_component_dofs(1, coupling_dofs_y_comp);
+    if(data_dim>2)
       get_component_dofs(2, coupling_dofs_z_comp);
 #endif
     n_interface_nodes = coupling_dofs_x_comp.n_elements();
@@ -286,8 +288,8 @@ namespace Adapter
     // exchange. Here, we deal with a vector valued problem for read and write
     // data namely displacement and forces. Therefore, we need dim entries per
     // vertex
-    write_data.resize(dim * n_interface_nodes);
-    read_data.resize(dim * n_interface_nodes);
+    write_data.resize(data_dim * n_interface_nodes);
+    read_data.resize(data_dim * n_interface_nodes);
     interface_nodes_ids.resize(n_interface_nodes);
 
     // get the coordinates of the interface nodes from deal.ii
@@ -333,12 +335,21 @@ namespace Adapter
       {
         // store initial write_data for precice in write_data
         format_deal_to_precice(deal_to_precice);
-
+        if (data_dim > 1)
+          {
         precice.writeBlockVectorData(write_data_id,
                                      n_interface_nodes,
                                      interface_nodes_ids.data(),
                                      write_data.data());
-
+          }
+        else
+          {
+            Assert(data_dim == 1, ExcInternalError());
+            precice.writeBlockScalarData(write_data_id,
+                                         n_interface_nodes,
+                                         interface_nodes_ids.data(),
+                                         write_data.data());
+          }
         precice.markActionFulfilled(
           precice::constants::actionWriteInitialData());
       }
@@ -348,20 +359,30 @@ namespace Adapter
     // read initial readData from preCICE if required for the first time step
     if (precice.isReadDataAvailable())
       {
+        if (data_dim > 1)
+      {
         precice.readBlockVectorData(read_data_id,
                                     n_interface_nodes,
                                     interface_nodes_ids.data(),
                                     read_data.data());
-
+          }
+        else
+          {
+            Assert(data_dim == 1, ExcInternalError());
+            precice.readBlockScalarData(read_data_id,
+                                        n_interface_nodes,
+                                        interface_nodes_ids.data(),
+                                        read_data.data());
+          }
         format_precice_to_deal(precice_to_deal);
       }
   }
 
 
 
-  template <int dim, typename VectorType, typename ParameterClass>
+  template <int dim, int data_dim, typename VectorType>
   void
-  Adapter<dim, VectorType, ParameterClass>::advance(
+  Adapter<dim, data_dim, VectorType>::advance(
     const VectorType &deal_to_precice,
     VectorType &      precice_to_deal,
     const double      computed_timestep_length)
@@ -375,10 +396,21 @@ namespace Adapter
       {
         format_deal_to_precice(deal_to_precice);
 
+        if (data_dim > 1)
+          {
         precice.writeBlockVectorData(write_data_id,
                                      n_interface_nodes,
                                      interface_nodes_ids.data(),
                                      write_data.data());
+      }
+        else
+          {
+            Assert(data_dim == 1, ExcInternalError());
+            precice.writeBlockScalarData(write_data_id,
+                                         n_interface_nodes,
+                                         interface_nodes_ids.data(),
+                                         write_data.data());
+          }
       }
 
     // Here, we need to specify the computed time step length and pass it to
@@ -389,10 +421,21 @@ namespace Adapter
     // data in our global vector by calling format_precice_to_deal
     if (precice.isReadDataAvailable())
       {
+        if (data_dim > 1)
+          {
         precice.readBlockVectorData(read_data_id,
                                     n_interface_nodes,
                                     interface_nodes_ids.data(),
                                     read_data.data());
+          }
+        else
+          {
+            Assert(data_dim == 1, ExcInternalError());
+            precice.readBlockScalarData(read_data_id,
+                                        n_interface_nodes,
+                                        interface_nodes_ids.data(),
+                                        read_data.data());
+          }
 
         format_precice_to_deal(precice_to_deal);
       }
@@ -400,9 +443,9 @@ namespace Adapter
 
 
 
-  template <int dim, typename VectorType, typename ParameterClass>
+  template <int dim, int data_dim, typename VectorType>
   void
-  Adapter<dim, VectorType, ParameterClass>::format_deal_to_precice(
+  Adapter<dim, data_dim, VectorType>::format_deal_to_precice(
     const VectorType &deal_to_precice)
   {
     // Assumption: x index is in the same position as y index in each IndexSet
@@ -418,13 +461,19 @@ namespace Adapter
 
     for (int i = 0; i < n_interface_nodes; ++i)
       {
-        write_data[dim * i]       = deal_to_precice[*x_comp];
-        write_data[(dim * i) + 1] = deal_to_precice[*y_comp];
+        AssertIndexRange(data_dim * i, write_data.size());
+        AssertIndexRange(*x_comp, deal_to_precice.size());
+
+        write_data[data_dim * i] = deal_to_precice[*x_comp];
         ++x_comp;
-        ++y_comp;
-        if (dim == 3)
+        if (data_dim > 1)
           {
-            write_data[(dim * i) + 2] = deal_to_precice[*z_comp];
+            write_data[(data_dim * i) + 1] = deal_to_precice[*y_comp];
+        ++y_comp;
+          }
+        if (data_dim == 2)
+          {
+            write_data[(data_dim * i) + 2] = deal_to_precice[*z_comp];
             ++z_comp;
           }
       }
@@ -432,9 +481,9 @@ namespace Adapter
 
 
 
-  template <int dim, typename VectorType, typename ParameterClass>
+  template <int dim, int data_dim, typename VectorType>
   void
-  Adapter<dim, VectorType, ParameterClass>::format_precice_to_deal(
+  Adapter<dim, data_dim, VectorType>::format_precice_to_deal(
     VectorType &precice_to_deal) const
   {
     // This is the opposite direction as above. See comment there.
@@ -444,13 +493,18 @@ namespace Adapter
 
     for (int i = 0; i < n_interface_nodes; ++i)
       {
-        precice_to_deal[*x_comp] = read_data[dim * i];
-        precice_to_deal[*y_comp] = read_data[(dim * i) + 1];
+        AssertIndexRange(data_dim * i, read_data.size());
+        AssertIndexRange(*x_comp, precice_to_deal.size());
+        precice_to_deal[*x_comp] = read_data[data_dim * i];
         ++x_comp;
-        ++y_comp;
-        if (dim == 3)
+        if (data_dim > 1)
           {
-            precice_to_deal[*z_comp] = read_data[(dim * i) + 2];
+            precice_to_deal[*y_comp] = read_data[(data_dim * i) + 1];
+        ++y_comp;
+          }
+        if (data_dim > 2)
+          {
+            precice_to_deal[*z_comp] = read_data[(data_dim * i) + 2];
             ++z_comp;
           }
       }
@@ -458,9 +512,9 @@ namespace Adapter
 
 
 
-  template <int dim, typename VectorType, typename ParameterClass>
+  template <int dim, int data_dim, typename VectorType>
   void
-  Adapter<dim, VectorType, ParameterClass>::save_current_state_if_required(
+  Adapter<dim, data_dim, VectorType>::save_current_state_if_required(
     const std::vector<VectorType *> &state_variables,
     Time &                           time_class)
   {
@@ -483,9 +537,9 @@ namespace Adapter
 
 
 
-  template <int dim, typename VectorType, typename ParameterClass>
+  template <int dim, int data_dim, typename VectorType>
   void
-  Adapter<dim, VectorType, ParameterClass>::reload_old_state_if_required(
+  Adapter<dim, data_dim, VectorType>::reload_old_state_if_required(
     std::vector<VectorType *> &state_variables,
     Time &                     time_class)
   {
