@@ -33,7 +33,7 @@ PROJECT(${TARGET})
 INCLUDE_DIRECTORIES(${CMAKE_SOURCE_DIR}/include)
 
 # Set the executable
-ADD_EXECUTABLE(${TARGET} ${TARGET_SRC})
+ADD_EXECUTABLE(${TARGET} ${TARGET_SRC} $<TARGET_OBJECTS:nonlinear_elasticity> $<TARGET_OBJECTS:linear_elasticity>)
 
 # Use deal.II macros for setting up the target
 DEAL_II_SETUP_TARGET(${TARGET})
