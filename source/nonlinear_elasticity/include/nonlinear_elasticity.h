@@ -284,9 +284,8 @@ namespace Nonlinear_Elasticity
     // and time steps. The Adapter class includes all functionalities for
     // coupling via preCICE. Look at the documentation of the class for more
     // information.
-    Adapter::Time time;
-    Adapter::Adapter<dim, BlockVector<double>, Parameters::AllParameters>
-      adapter;
+    Adapter::Time                                   time;
+    Adapter::Adapter<dim, dim, BlockVector<double>> adapter;
 
     // Then define a number of variables to store norms and update norms and
     // normalisation factors.

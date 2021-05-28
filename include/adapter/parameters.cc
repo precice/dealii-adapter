@@ -61,7 +61,7 @@ namespace Parameters
       prm.add_parameter("Model",
                         model,
                         "Structural model to be used: linear or neo-Hookean",
-                        Patterns::Selection("linear|neo-Hookean"));
+                        Patterns::Selection("linear|neo-Hookean|heat"));
 
       prm.add_parameter("Solver type",
                         type_lin,
@@ -189,15 +189,15 @@ namespace Parameters
     lambda = 2 * mu * nu / (1 - 2 * nu);
 
     // Look at the specific type of read data
-    if ((read_data_name.find("Stress") == 0))
-      data_consistent = true;
-    else if ((read_data_name.find("Force") == 0))
-      data_consistent = false;
-    else
-      AssertThrow(
-        false,
-        ExcMessage(
-          "Unknown read data type. Please use 'Force' or 'Stress' in the read data naming."));
+//    if ((read_data_name.find("Stress") == 0))
+//      data_consistent = true;
+//    else if ((read_data_name.find("Force") == 0))
+//      data_consistent = false;
+//    else
+//      AssertThrow(
+//        false,
+//        ExcMessage(
+//          "Unknown read data type. Please use 'Force','Stress' or 'Heat-Flux' in the read data naming."));
 
     // Optional, if we want to print all parameters in the beginning of the
     // simulation

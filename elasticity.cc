@@ -1,9 +1,9 @@
 #include <adapter/parameters.h>
 #include <sys/stat.h>
 
+#include "source/heat_equation/heat_equation.cc"
 #include "source/linear_elasticity/include/linear_elasticity.h"
 #include "source/nonlinear_elasticity/include/nonlinear_elasticity.h"
-
 int
 main(int argc, char **argv)
 {
@@ -94,6 +94,11 @@ main(int argc, char **argv)
         {
           Linear_Elasticity::ElastoDynamics<DIM> elastic_solver(parameter_file);
           elastic_solver.run();
+        }
+      else if (solver.model == "heat") // linear
+        {
+          Heat_Transfer::HeatEquation<DIM> heat_solver(parameter_file);
+          heat_solver.run();
         }
       else
         AssertThrow(false, ExcNotImplemented())
