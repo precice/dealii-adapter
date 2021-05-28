@@ -63,7 +63,7 @@ namespace Adapter
     void
     set_absolute_time(const double new_time)
     {
-      timestep     = new_time / delta_t;
+      timestep--;//     = new_time / delta_t;
       time_current = new_time;
     }
 
