@@ -33,7 +33,7 @@ PROJECT(${TARGET})
 INCLUDE_DIRECTORIES(${CMAKE_SOURCE_DIR}/include)
 
 # Set the executable
-ADD_EXECUTABLE(${TARGET} ${TARGET_SRC})
+ADD_EXECUTABLE(${TARGET} ${TARGET_SRC} $<TARGET_OBJECTS:nonlinear_elasticity> $<TARGET_OBJECTS:linear_elasticity>)
 
 # Use deal.II macros for setting up the target
 DEAL_II_SETUP_TARGET(${TARGET})
@@ -57,8 +57,7 @@ MESSAGE(STATUS "Using the preCICE version found at ${precice_CONFIG}")
 ADD_SUBDIRECTORY(source)
 
 # ...and link them
-TARGET_LINK_LIBRARIES(${TARGET}  nonlinear_elasticity linear_elasticity)
-
+TARGET_LINK_LIBRARIES(${TARGET}  $<TARGET_OBJECTS:nonlinear_elasticity> $<TARGET_OBJECTS:linear_elasticity>)
 
 #
 # Custom "debug" and "release" make targets:
