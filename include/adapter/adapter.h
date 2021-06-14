@@ -243,37 +243,35 @@ namespace Adapter
     // get the number of interface nodes from deal.II
     // Therefore, we extract one component of the vector valued dofs and store
     // them in an IndexSet
-    std::set<types::boundary_id> couplingBoundary;
-    couplingBoundary.insert(deal_boundary_interface_id);
-
-    const FEValuesExtractors::Scalar x_displacement(0);
-
-    coupling_dofs_x_comp =
-      DoFTools::extract_boundary_dofs(dof_handler,
-                                      dof_handler.get_fe().component_mask(
-                                        x_displacement),
-                                      couplingBoundary);
-
-    // The dofs related to the y-component are needed as well. See also
-    // comment below, why this is necessary.
-    const FEValuesExtractors::Scalar y_displacement(1);
-
-    coupling_dofs_y_comp =
-      DoFTools::extract_boundary_dofs(dof_handler,
-                                      dof_handler.get_fe().component_mask(
-                                        y_displacement),
-                                      couplingBoundary);
+    std::set<types::boundary_id> couplingBoundary{deal_boundary_interface_id};
+    // Return by value for newer deal.II versions
+#if DEAL_II_VERSION_GTE(9, 3, 0)
+    auto get_component_dofs = [&](const int component) {
+      const FEValuesExtractors::Scalar component_dofs(component);
+      return DoFTools::extract_boundary_dofs(
+        dof_handler,
+        dof_handler.get_fe().component_mask(component_dofs),
+        couplingBoundary);
+    };
+    coupling_dofs_x_comp = get_component_dofs(0);
+    coupling_dofs_y_comp = get_component_dofs(1);
     if (dim == 3)
-      {
-        const FEValuesExtractors::Scalar z_displacement(2);
-
-        coupling_dofs_z_comp =
-          DoFTools::extract_boundary_dofs(dof_handler,
-                                          dof_handler.get_fe().component_mask(
-                                            z_displacement),
-                                          couplingBoundary);
-      }
-
+      coupling_dofs_z_comp = get_component_dofs(2);
+#else
+    // Return by argument for older deal.II versions
+    auto get_component_dofs = [&](const int component, auto &dof_index_set) {
+      const FEValuesExtractors::Scalar component_dofs(component);
+      DoFTools::extract_boundary_dofs(dof_handler,
+                                      dof_handler.get_fe().component_mask(
+                                        component_dofs),
+                                      dof_index_set,
+                                      couplingBoundary);
+    };
+    get_component_dofs(0, coupling_dofs_x_comp);
+    get_component_dofs(1, coupling_dofs_y_comp);
+    if (dim == 3)
+      get_component_dofs(2, coupling_dofs_z_comp);
+#endif
     n_interface_nodes = coupling_dofs_x_comp.n_elements();
 
     std::cout << "\t Number of coupling nodes:     " << n_interface_nodes
@@ -298,12 +296,12 @@ namespace Adapter
     // We use here a simple Q1 mapping. In case one has more complex
     // geomtries, you might want to change this to a higher order mapping.
     // We only need to map the first component for a dim dimensional problem
-
+    const FEValuesExtractors::Scalar dofs_x_direction(0);
     DoFTools::map_boundary_dofs_to_support_points(
       StaticMappingQ1<dim>::mapping,
       dof_handler,
       support_points,
-      dof_handler.get_fe().component_mask(x_displacement),
+      dof_handler.get_fe().component_mask(dofs_x_direction),
       deal_boundary_interface_id);
 
     // support_points contains now the coordinates of all dofs
