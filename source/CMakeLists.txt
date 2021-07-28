@@ -1,4 +1,0 @@
-CMAKE_MINIMUM_REQUIRED(VERSION 3.1.0)
-
-ADD_SUBDIRECTORY(nonlinear_elasticity)
-ADD_SUBDIRECTORY(linear_elasticity)

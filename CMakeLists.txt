@@ -19,7 +19,11 @@ ADD_DEFINITIONS(-DDIM=${DIM})
 
 # Set the target and the target source
 SET( TARGET "elasticity" )
-SET( TARGET_SRC ${TARGET}.cc include/adapter/parameters.cc)
+SET( TARGET_SRC
+    ${TARGET}.cc
+    ${CMAKE_CURRENT_BINARY_DIR}/source/linear_elasticity/linear_elasticity.cc
+    ${CMAKE_CURRENT_BINARY_DIR}/source/nonlinear_elasticity/nonlinear_elasticity.cc
+    ${CMAKE_CURRENT_BINARY_DIR}/include/adapter/parameters.cc)
 
 DEAL_II_INITIALIZE_CACHED_VARIABLES()
 
@@ -33,7 +37,7 @@ PROJECT(${TARGET})
 INCLUDE_DIRECTORIES(${CMAKE_SOURCE_DIR}/include)
 
 # Set the executable
-ADD_EXECUTABLE(${TARGET} ${TARGET_SRC} $<TARGET_OBJECTS:nonlinear_elasticity> $<TARGET_OBJECTS:linear_elasticity>)
+ADD_EXECUTABLE(${TARGET} ${TARGET_SRC})
 
 # Use deal.II macros for setting up the target
 DEAL_II_SETUP_TARGET(${TARGET})
@@ -60,12 +64,6 @@ IF(NOT ${precice_FOUND})
 ENDIF()
 MESSAGE(STATUS "Using the preCICE version found at ${precice_DIR}")
 TARGET_LINK_LIBRARIES(${TARGET} precice::precice)
-
-# add the individual solver
-ADD_SUBDIRECTORY(source)
-
-# ...and link them
-TARGET_LINK_LIBRARIES(${TARGET}  $<TARGET_OBJECTS:nonlinear_elasticity> $<TARGET_OBJECTS:linear_elasticity>)
 
 #
 # Custom "debug" and "release" make targets:
