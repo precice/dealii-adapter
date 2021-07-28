@@ -46,12 +46,20 @@ SET_PROPERTY(TARGET  ${TARGET}  APPEND  PROPERTY  COMPILE_DEFINITIONS
             GIT_REVISION="${GIT_REVISION}"
             GIT_SHORTREV="${GIT_SHORTREV}")
 
-
-FIND_PACKAGE(precice REQUIRED
-    HINTS ${PRECICE_DIR} $ENV{precice_DIR})
+# the environment variable precice_DIR is searched by default
+FIND_PACKAGE(precice 2.0
+        HINTS ${precice_DIR} ${PRECICE_DIR} $ENV{PRECICE_DIR}
+  )
+IF(NOT ${precice_FOUND})
+   MESSAGE(FATAL_ERROR "\n"
+    "*** Could not locate a (sufficiently recent) version of preCICE. ***\n\n"
+    "You may want to either pass a flag -Dprecice_DIR=/path/to/precice to cmake\n"
+    "(where the path points to the installation prefix or the build directory)\n"
+    " or set an environment variable \"precice_DIR\" that contains this path."
+    )
+ENDIF()
+MESSAGE(STATUS "Using the preCICE version found at ${precice_DIR}")
 TARGET_LINK_LIBRARIES(${TARGET} precice::precice)
-
-MESSAGE(STATUS "Using the preCICE version found at ${precice_CONFIG}")
 
 # add the individual solver
 ADD_SUBDIRECTORY(source)
