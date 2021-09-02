@@ -21,9 +21,9 @@ ADD_DEFINITIONS(-DDIM=${DIM})
 SET( TARGET "elasticity" )
 SET( TARGET_SRC
     ${TARGET}.cc
-    ${CMAKE_CURRENT_BINARY_DIR}/source/linear_elasticity/linear_elasticity.cc
-    ${CMAKE_CURRENT_BINARY_DIR}/source/nonlinear_elasticity/nonlinear_elasticity.cc
-    ${CMAKE_CURRENT_BINARY_DIR}/include/adapter/parameters.cc)
+    ${CMAKE_SOURCE_DIR}/source/linear_elasticity/linear_elasticity.cc
+    ${CMAKE_SOURCE_DIR}/source/nonlinear_elasticity/nonlinear_elasticity.cc
+    ${CMAKE_SOURCE_DIR}/include/adapter/parameters.cc)
 
 DEAL_II_INITIALIZE_CACHED_VARIABLES()
 
