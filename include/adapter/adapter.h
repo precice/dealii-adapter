@@ -253,25 +253,25 @@ namespace Adapter
       return DoFTools::extract_boundary_dofs(
         dof_handler,
         dof_handler.get_fe().component_mask(component_dofs),
-                                    couplingBoundary);
+        couplingBoundary);
     };
-    for( int d = 0; d < data_dim; ++d)
-     coupling_dofs_x_comp = get_component_dofs(d);
+    for (int d = 0; d < data_dim; ++d)
+      coupling_dofs_x_comp = get_component_dofs(d);
 #else
 
     auto get_component_dofs = [&](const int component, auto &dof_index_set) {
       const FEValuesExtractors::Scalar component_dofs(component);
-    DoFTools::extract_boundary_dofs(dof_handler,
-                                    dof_handler.get_fe().component_mask(
+      DoFTools::extract_boundary_dofs(dof_handler,
+                                      dof_handler.get_fe().component_mask(
                                         component_dofs),
                                       dof_index_set,
-                                    couplingBoundary);
+                                      couplingBoundary);
     };
     get_component_dofs(0, coupling_dofs_x_comp);
-    
-    if(data_dim>1)
+
+    if (data_dim > 1)
       get_component_dofs(1, coupling_dofs_y_comp);
-    if(data_dim>2)
+    if (data_dim > 2)
       get_component_dofs(2, coupling_dofs_z_comp);
 #endif
     n_interface_nodes = coupling_dofs_x_comp.n_elements();
@@ -337,10 +337,10 @@ namespace Adapter
         format_deal_to_precice(deal_to_precice);
         if (data_dim > 1)
           {
-        precice.writeBlockVectorData(write_data_id,
-                                     n_interface_nodes,
-                                     interface_nodes_ids.data(),
-                                     write_data.data());
+            precice.writeBlockVectorData(write_data_id,
+                                         n_interface_nodes,
+                                         interface_nodes_ids.data(),
+                                         write_data.data());
           }
         else
           {
@@ -360,11 +360,11 @@ namespace Adapter
     if (precice.isReadDataAvailable())
       {
         if (data_dim > 1)
-      {
-        precice.readBlockVectorData(read_data_id,
-                                    n_interface_nodes,
-                                    interface_nodes_ids.data(),
-                                    read_data.data());
+          {
+            precice.readBlockVectorData(read_data_id,
+                                        n_interface_nodes,
+                                        interface_nodes_ids.data(),
+                                        read_data.data());
           }
         else
           {
@@ -398,11 +398,11 @@ namespace Adapter
 
         if (data_dim > 1)
           {
-        precice.writeBlockVectorData(write_data_id,
-                                     n_interface_nodes,
-                                     interface_nodes_ids.data(),
-                                     write_data.data());
-      }
+            precice.writeBlockVectorData(write_data_id,
+                                         n_interface_nodes,
+                                         interface_nodes_ids.data(),
+                                         write_data.data());
+          }
         else
           {
             Assert(data_dim == 1, ExcInternalError());
@@ -423,10 +423,10 @@ namespace Adapter
       {
         if (data_dim > 1)
           {
-        precice.readBlockVectorData(read_data_id,
-                                    n_interface_nodes,
-                                    interface_nodes_ids.data(),
-                                    read_data.data());
+            precice.readBlockVectorData(read_data_id,
+                                        n_interface_nodes,
+                                        interface_nodes_ids.data(),
+                                        read_data.data());
           }
         else
           {
@@ -469,7 +469,7 @@ namespace Adapter
         if (data_dim > 1)
           {
             write_data[(data_dim * i) + 1] = deal_to_precice[*y_comp];
-        ++y_comp;
+            ++y_comp;
           }
         if (data_dim == 2)
           {
@@ -500,7 +500,7 @@ namespace Adapter
         if (data_dim > 1)
           {
             precice_to_deal[*y_comp] = read_data[(data_dim * i) + 1];
-        ++y_comp;
+            ++y_comp;
           }
         if (data_dim > 2)
           {

@@ -23,7 +23,7 @@ SET( TARGET_SRC
     ${TARGET}.cc
     ${CMAKE_SOURCE_DIR}/source/linear_elasticity/linear_elasticity.cc
     ${CMAKE_SOURCE_DIR}/source/nonlinear_elasticity/nonlinear_elasticity.cc
-    ${CMAKE_SOURCE_DIR}/source/heat_equation
+    ${CMAKE_SOURCE_DIR}/source/heat_equation/heat_equation.cc
     ${CMAKE_SOURCE_DIR}/include/adapter/parameters.cc)
 
 DEAL_II_INITIALIZE_CACHED_VARIABLES()
@@ -65,15 +65,6 @@ IF(NOT ${precice_FOUND})
 ENDIF()
 MESSAGE(STATUS "Using the preCICE version found at ${precice_DIR}")
 TARGET_LINK_LIBRARIES(${TARGET} precice::precice)
-
-MESSAGE(STATUS "Using the preCICE version found at ${precice_CONFIG}")
-
-# add the individual solver
-ADD_SUBDIRECTORY(source)
-
-# ...and link them
-TARGET_LINK_LIBRARIES(${TARGET}  nonlinear_elasticity linear_elasticity)
-
 
 #
 # Custom "debug" and "release" make targets:
