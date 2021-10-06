@@ -10,10 +10,10 @@ Coupled structural solvers written with the C++ finite element library deal.II:
 Applied coupling functionalities have been separated and can be found in the `include/adapter` directory.
 
 ## Start here
-Our [wiki](https://www.precice.org/adapter-dealii-overview.html) will help you start. If you are missing something, [let us know](https://www.precice.org/resources/#contact).
+Our [wiki](https://precice.org/adapter-dealii-overview.html) will help you start. If you are missing something, [let us know](https://recice.org/resources/#contact).
 
 ## Citing
-preCICE is an academic project, developed at the [Technical University of Munich](https://www5.in.tum.de/wiki/index.php/Home) and at the [University of Stuttgart](https://www.ipvs.uni-stuttgart.de/). If you use preCICE, please [cite us](https://www.precice.org/publications/):
+preCICE is an academic project, developed at the [Technical University of Munich](https://www5.in.tum.de/wiki/index.php/Home) and at the [University of Stuttgart](https://www.ipvs.uni-stuttgart.de/). If you use preCICE, please [cite us](https://precice.org/publications/):
 
 *H.-J. Bungartz, F. Lindner, B. Gatzhammer, M. Mehl, K. Scheufele, A. Shukaev, and B. Uekermann: preCICE - A Fully Parallel Library for Multi-Physics Surface Coupling. Computers and Fluids, 141, 250–258, 2016.*
 
