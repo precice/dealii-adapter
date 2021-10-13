@@ -329,9 +329,9 @@ namespace Heat_Transfer
                 fe_values.shape_value(i, point) * weights[point];
             }
 
-        for (unsigned int face : cell->face_indices())
-          if (cell->face(face)->at_boundary() &&
-              (cell->face(face)->boundary_id() == interface_boundary_id))
+        for (const auto &face : cell->face_iterators())
+          if (face->at_boundary() &&
+              (face->boundary_id() == interface_boundary_id))
             {
               fe_f_values.reinit(cell, face);
               fe_f_values.get_function_values(heat_flux, local_flux);
