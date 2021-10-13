@@ -18,14 +18,11 @@ jobs:
          command="sudo apt-get -y update && \
                   wget https://github.com/precice/precice/releases/download/v2.1.1/libprecice2_2.1.1_focal.deb && \
                   sudo apt-get -y install ./libprecice2_2.1.1_focal.deb && \
-                  git clone https://github.com/${{ github.repository }} && \
-                  cd dealii-adapter && \
-                  git fetch origin ${{ github.ref }} && \
-                  git checkout FETCH_HEAD && \
+                  cd /src && \
                   cmake . && \
                   make";
          
          echo $command
          
          docker pull dealii/dealii:v9.2.0-focal
-         docker run -t dealii/dealii:v9.2.0-focal /bin/sh -c "$command";
+         docker run -t -v $PWD:/src dealii/dealii:v9.2.0-focal /bin/sh -c "$command";
