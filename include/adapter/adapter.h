@@ -471,7 +471,7 @@ namespace Adapter
             write_data[(data_dim * i) + 1] = deal_to_precice[*y_comp];
             ++y_comp;
           }
-        if (data_dim == 2)
+        if (data_dim > 2)
           {
             write_data[(data_dim * i) + 2] = deal_to_precice[*z_comp];
             ++z_comp;
