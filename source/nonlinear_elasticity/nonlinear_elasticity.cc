@@ -45,7 +45,6 @@
 
 #include <deal.II/physics/elasticity/kinematics.h>
 #include <deal.II/physics/elasticity/standard_tensors.h>
-#include <deal.II/physics/transformations.h>
 
 #include <adapter/parameters.h>
 
@@ -817,9 +816,15 @@ namespace Nonlinear_Elasticity
                   Physics::Elasticity::Kinematics::F(
                     scratch.solution_grads_u_total[f_q_point]);
 
+                // da/dA * N = det F F^{-T} * N := n_star
+                // -> da/dA = n_star.norm()
+                const auto n_star =
+                  determinant(F) * transpose(invert(F)) *
+                  scratch.fe_face_values_ref.normal_vector(f_q_point);
+
+                // ref_stress = da/dA * stress
                 const Tensor<1, dim, NumberType> referential_stress =
-                  Physics::Transformations::Covariant::pull_back(
-                    local_stress[f_q_point], F);
+                  local_stress[f_q_point] * n_star.norm();
 
                 for (unsigned int i = 0; i < dofs_per_cell; ++i)
                   {
@@ -1041,7 +1046,8 @@ namespace Nonlinear_Elasticity
 
     const UpdateFlags uf_cell(update_values | update_gradients |
                               update_JxW_values);
-    const UpdateFlags uf_face(update_values | update_JxW_values);
+    const UpdateFlags uf_face(update_values | update_normal_vectors |
+                              update_JxW_values);
 
     const BlockVector<double> solution_total(
       get_total_solution(solution_delta));
