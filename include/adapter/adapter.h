@@ -366,17 +366,13 @@ namespace Adapter
     // This is essentially the same as during initialization
     // We have already all IDs and just need to convert our obtained data to
     // the preCICE compatible 'write_data' vector, which is done in the
-    // format_deal_to_precice function. All this is of course only done in
-    // case write data is required.
-    if (precice.isWriteDataRequired(computed_timestep_length))
-      {
-        format_deal_to_precice(deal_to_precice);
+    // format_deal_to_precice function.
+    format_deal_to_precice(deal_to_precice);
 
-        precice.writeBlockVectorData(write_data_id,
-                                     n_interface_nodes,
-                                     interface_nodes_ids.data(),
-                                     write_data.data());
-      }
+    precice.writeBlockVectorData(write_data_id,
+                                 n_interface_nodes,
+                                 interface_nodes_ids.data(),
+                                 write_data.data());
 
     // Here, we need to specify the computed time step length and pass it to
     // preCICE
