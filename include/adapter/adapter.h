@@ -346,15 +346,12 @@ namespace Adapter
     precice.initializeData();
 
     // read initial readData from preCICE if required for the first time step
-    if (precice.isReadDataAvailable())
-      {
-        precice.readBlockVectorData(read_data_id,
-                                    n_interface_nodes,
-                                    interface_nodes_ids.data(),
-                                    read_data.data());
+    precice.readBlockVectorData(read_data_id,
+                                n_interface_nodes,
+                                interface_nodes_ids.data(),
+                                read_data.data());
 
-        format_precice_to_deal(precice_to_deal);
-      }
+    format_precice_to_deal(precice_to_deal);
   }
 
 
@@ -387,15 +384,12 @@ namespace Adapter
 
     // Here, we obtain data from another participant. Again, we insert the
     // data in our global vector by calling format_precice_to_deal
-    if (precice.isReadDataAvailable())
-      {
-        precice.readBlockVectorData(read_data_id,
-                                    n_interface_nodes,
-                                    interface_nodes_ids.data(),
-                                    read_data.data());
+    precice.readBlockVectorData(read_data_id,
+                                n_interface_nodes,
+                                interface_nodes_ids.data(),
+                                read_data.data());
 
-        format_precice_to_deal(precice_to_deal);
-      }
+    format_precice_to_deal(precice_to_deal);
   }
 
 
