@@ -325,9 +325,6 @@ namespace Adapter
                             interface_nodes_positions.data(),
                             interface_nodes_ids.data());
 
-    // Initialize preCICE internally
-    precice.initialize();
-
     // write initial writeData to preCICE if required
     if (precice.isActionRequired(precice::constants::actionWriteInitialData()))
       {
@@ -343,7 +340,8 @@ namespace Adapter
           precice::constants::actionWriteInitialData());
       }
 
-    precice.initializeData();
+    // Initialize preCICE internally
+    precice.initialize();
 
     // read initial readData from preCICE if required for the first time step
     precice.readBlockVectorData(read_data_id,
