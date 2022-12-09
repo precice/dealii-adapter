@@ -326,7 +326,7 @@ namespace Adapter
                             interface_nodes_ids.data());
 
     // write initial writeData to preCICE if required
-    if (precice.isActionRequired(precice::constants::actionWriteInitialData()))
+    if (precice.requiresInitialData())
       {
         // store initial write_data for precice in write_data
         format_deal_to_precice(deal_to_precice);
@@ -335,9 +335,6 @@ namespace Adapter
                                      n_interface_nodes,
                                      interface_nodes_ids.data(),
                                      write_data.data());
-
-        precice.markActionFulfilled(
-          precice::constants::actionWriteInitialData());
       }
 
     // Initialize preCICE internally
@@ -454,8 +451,7 @@ namespace Adapter
   {
     // First, we let preCICE check, whether we need to store the variables.
     // Then, the data is stored in the class
-    if (precice.isActionRequired(
-          precice::constants::actionWriteIterationCheckpoint()))
+    if (precice.requiresWritingCheckpoint())
       {
         old_state_data.resize(state_variables.size());
 
@@ -463,9 +459,6 @@ namespace Adapter
           old_state_data[i] = *(state_variables[i]);
 
         old_time_value = time_class.current();
-
-        precice.markActionFulfilled(
-          precice::constants::actionWriteIterationCheckpoint());
       }
   }
 
@@ -479,8 +472,7 @@ namespace Adapter
   {
     // In case we need to reload a state, we just take the internally stored
     // data vectors and write then in to the input data
-    if (precice.isActionRequired(
-          precice::constants::actionReadIterationCheckpoint()))
+    if (precice.requiresReadingCheckpoint())
       {
         Assert(state_variables.size() == old_state_data.size(),
                ExcMessage(
@@ -492,9 +484,6 @@ namespace Adapter
         // Here, we expect the time class to offer an option to specify a
         // given time value.
         time_class.set_absolute_time(old_time_value);
-
-        precice.markActionFulfilled(
-          precice::constants::actionReadIterationCheckpoint());
       }
   }
 } // namespace Adapter
