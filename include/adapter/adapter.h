@@ -330,8 +330,11 @@ namespace Adapter
     precice.initialize();
 
     // read initial readData from preCICE if required for the first time step
-    precice.readData(
-      mesh_name, read_data_name, interface_nodes_ids, 0, read_data);
+    precice.readData(mesh_name,
+                     read_data_name,
+                     interface_nodes_ids,
+                     precice.getMaxTimeStepSize(),
+                     read_data);
 
     format_precice_to_deal(precice_to_deal);
   }
@@ -365,7 +368,7 @@ namespace Adapter
     precice.readData(mesh_name,
                      read_data_name,
                      interface_nodes_ids,
-                     1,
+                     precice.getMaxTimeStepSize(),
                      read_data);
 
     format_precice_to_deal(precice_to_deal);
