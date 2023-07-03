@@ -11,7 +11,7 @@
 
 #include <adapter/dof_tools_extension.h>
 #include <adapter/time_handler.h>
-#include <precice/SolverInterface.hpp>
+#include <precice/precice.hpp>
 
 
 namespace Adapter
@@ -28,7 +28,7 @@ namespace Adapter
   {
   public:
     /**
-     * @brief      Constructor, which sets up the precice Solverinterface
+     * @brief      Constructor, which sets up the precice Participant
      *
      * @param[in]  parameters Parameter class, which hold the data specified
      *             in the parameters.prm file
@@ -118,10 +118,10 @@ namespace Adapter
                                  Time &                     time_class);
 
     /**
-     * @brief public precice solverinterface
+     * @brief public precice Participant
      */
 
-    precice::SolverInterface precice;
+    precice::Participant precice;
 
     // Boundary ID of the deal.II mesh, associated with the coupling
     // interface. The variable is public and should be used during grid
@@ -222,7 +222,7 @@ namespace Adapter
     VectorType &           precice_to_deal)
   {
     AssertThrow(
-      dim == precice.getDimensions(),
+      dim == precice.getMeshDimensions(mesh_name),
       ExcMessage("The dimension of your solver needs to be consistent with the "
                  "dimension specified in your precice-config file. In case you "
                  "run one of the tutorials, the dimension can be specified via "
@@ -311,9 +311,8 @@ namespace Adapter
 
     // pass node coordinates to precice
     precice.setMeshVertices(mesh_name,
-                            n_interface_nodes,
-                            interface_nodes_positions.data(),
-                            interface_nodes_ids.data());
+                            interface_nodes_positions,
+                            interface_nodes_ids);
 
     // write initial writeData to preCICE if required
     if (precice.requiresInitialData())
@@ -321,22 +320,18 @@ namespace Adapter
         // store initial write_data for precice in write_data
         format_deal_to_precice(deal_to_precice);
 
-        precice.writeBlockVectorData(mesh_name,
-                                     write_data_name,
-                                     n_interface_nodes,
-                                     interface_nodes_ids.data(),
-                                     write_data.data());
+        precice.writeData(mesh_name,
+                          write_data_name,
+                          interface_nodes_ids,
+                          write_data);
       }
 
     // Initialize preCICE internally
     precice.initialize();
 
     // read initial readData from preCICE if required for the first time step
-    precice.readBlockVectorData(mesh_name,
-                                read_data_name,
-                                n_interface_nodes,
-                                interface_nodes_ids.data(),
-                                read_data.data());
+    precice.readData(
+      mesh_name, read_data_name, interface_nodes_ids, 0, read_data);
 
     format_precice_to_deal(precice_to_deal);
   }
@@ -356,11 +351,10 @@ namespace Adapter
     // format_deal_to_precice function.
     format_deal_to_precice(deal_to_precice);
 
-    precice.writeBlockVectorData(mesh_name,
-                                 write_data_name,
-                                 n_interface_nodes,
-                                 interface_nodes_ids.data(),
-                                 write_data.data());
+    precice.writeData(mesh_name,
+                      write_data_name,
+                      interface_nodes_ids,
+                      write_data);
 
     // Here, we need to specify the computed time step length and pass it to
     // preCICE
@@ -368,11 +362,11 @@ namespace Adapter
 
     // Here, we obtain data from another participant. Again, we insert the
     // data in our global vector by calling format_precice_to_deal
-    precice.readBlockVectorData(mesh_name,
-                                read_data_name,
-                                n_interface_nodes,
-                                interface_nodes_ids.data(),
-                                read_data.data());
+    precice.readData(mesh_name,
+                     read_data_name,
+                     interface_nodes_ids,
+                     1,
+                     read_data);
 
     format_precice_to_deal(precice_to_deal);
   }
