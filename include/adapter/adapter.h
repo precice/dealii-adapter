@@ -228,8 +228,8 @@ namespace Adapter
   Adapter<dim, VectorType, ParameterClass>::initialize(
     const DoFHandler<dim> &dof_handler,
     const VectorType &     deal_to_precice,
-    VectorType &           precice_to_deal,
-    double                 relative_read_time)
+    double                 relative_read_time,
+    VectorType &           precice_to_deal)
   {
     AssertThrow(
       dim == precice.getMeshDimensions(mesh_name),
