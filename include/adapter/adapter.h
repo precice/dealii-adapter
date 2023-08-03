@@ -48,16 +48,21 @@ namespace Adapter
      *             individual configuration and preCICE determines it
      *             automatically. In many cases, this data will just represent
      *             your initial condition.
+     * @param[in]  relative_read_time Time associated to the coupling data
+     *             received from preCICE and stored in \p precice_to_deal.
+     *             See also precice::Participant::readData
      * @param[out] precice_to_deal Data, which is received from preCICE/ from
      *             other participants. Wether this data is useful already in
      *             the beginning depends on your individual configuration and
      *             preCICE determines it automatically. In many cases, this
      *             data will just represent the initial condition of other
      *             participants.
+     *
      */
     void
     initialize(const DoFHandler<dim> &dof_handler,
                const VectorType &     deal_to_precice,
+               double                 relative_read_time,
                VectorType &           precice_to_deal);
 
     /**
@@ -67,6 +72,9 @@ namespace Adapter
      * @param[in]  deal_to_precice Same data as in @p initialize_precice() i.e.
      *             data, which should be given to preCICE after each time step
      *             and exchanged with other participants.
+     * @param[in]  relative_read_time Time associated to the coupling data
+     *             received from preCICE and stored in \p precice_to_deal.
+     *             See also precice::Participant::readData
      * @param[out] precice_to_deal Same data as in @p initialize_precice() i.e.
      *             data, which is received from preCICE/other participants
      *             after each time step and exchanged with other participants.
@@ -75,6 +83,7 @@ namespace Adapter
      */
     void
     advance(const VectorType &deal_to_precice,
+            double            relative_read_time,
             VectorType &      precice_to_deal,
             const double      computed_timestep_length);
 
@@ -219,7 +228,8 @@ namespace Adapter
   Adapter<dim, VectorType, ParameterClass>::initialize(
     const DoFHandler<dim> &dof_handler,
     const VectorType &     deal_to_precice,
-    VectorType &           precice_to_deal)
+    VectorType &           precice_to_deal,
+    double                 relative_read_time)
   {
     AssertThrow(
       dim == precice.getMeshDimensions(mesh_name),
@@ -333,7 +343,7 @@ namespace Adapter
     precice.readData(mesh_name,
                      read_data_name,
                      interface_nodes_ids,
-                     precice.getMaxTimeStepSize(),
+                     relative_read_time,
                      read_data);
 
     format_precice_to_deal(precice_to_deal);
@@ -345,6 +355,7 @@ namespace Adapter
   void
   Adapter<dim, VectorType, ParameterClass>::advance(
     const VectorType &deal_to_precice,
+    double            relative_read_time,
     VectorType &      precice_to_deal,
     const double      computed_timestep_length)
   {
@@ -368,7 +379,7 @@ namespace Adapter
     precice.readData(mesh_name,
                      read_data_name,
                      interface_nodes_ids,
-                     precice.getMaxTimeStepSize(),
+                     relative_read_time,
                      read_data);
 
     format_precice_to_deal(precice_to_deal);
