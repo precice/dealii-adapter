@@ -107,7 +107,10 @@ namespace Nonlinear_Elasticity
 
     // Initialize preCICE before starting the time loop
     // Here, all information concerning the coupling is passed to preCICE
-    adapter.initialize(dof_handler_ref, total_displacement, external_stress);
+    adapter.initialize(dof_handler_ref,
+                       total_displacement,
+                       time.get_delta_t(),
+                       external_stress);
 
     BlockVector<NumberType> solution_delta(dofs_per_block);
 
@@ -138,6 +141,7 @@ namespace Nonlinear_Elasticity
         // ... and pass the coupling data to preCICE, in this case displacement
         // (write data) and stress (read data)
         adapter.advance(total_displacement,
+                        time.get_delta_t(),
                         external_stress,
                         time.get_delta_t());
 
