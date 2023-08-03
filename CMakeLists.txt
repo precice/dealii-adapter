@@ -51,7 +51,7 @@ SET_PROPERTY(TARGET  ${TARGET}  APPEND  PROPERTY  COMPILE_DEFINITIONS
             GIT_SHORTREV="${GIT_SHORTREV}")
 
 # the environment variable precice_DIR is searched by default
-FIND_PACKAGE(precice 2.0
+FIND_PACKAGE(precice 3.0
         HINTS ${precice_DIR} ${PRECICE_DIR} $ENV{PRECICE_DIR}
   )
 IF(NOT ${precice_FOUND})
