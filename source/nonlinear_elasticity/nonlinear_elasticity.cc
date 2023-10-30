@@ -275,7 +275,7 @@ namespace Nonlinear_Elasticity
               AssertThrow(false,
                           ExcMessage("Unknown boundary id, did "
                                      "you set a boundary "
-                                     "condition?"))
+                                     "condition?"));
           }
     // Check, whether the given IDs are mutually exclusive
     AssertThrow(
