@@ -96,7 +96,7 @@ main(int argc, char **argv)
           elastic_solver.run();
         }
       else
-        AssertThrow(false, ExcNotImplemented())
+        AssertThrow(false, ExcNotImplemented());
     }
   catch (std::exception &exc)
     {
