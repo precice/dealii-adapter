@@ -107,10 +107,7 @@ namespace Nonlinear_Elasticity
 
     // Initialize preCICE before starting the time loop
     // Here, all information concerning the coupling is passed to preCICE
-    adapter.initialize(dof_handler_ref,
-                       total_displacement,
-                       time.get_delta_t(),
-                       external_stress);
+    adapter.initialize(dof_handler_ref, total_displacement);
 
     BlockVector<NumberType> solution_delta(dofs_per_block);
 
@@ -124,6 +121,18 @@ namespace Nonlinear_Elasticity
         solution_delta = 0.0;
 
         time.increment();
+
+        AssertThrow(std::abs(time.get_delta_t() -
+                             adapter.precice.getMaxTimeStepSize()) < 1e-10,
+                    ExcMessage(
+                      "This solver supports only constant time-step sizes."
+                      "Configured time step size in deal.II parameter file: " +
+                      std::to_string(time.get_delta_t()) +
+                      ". Time-window size from preCICE: " +
+                      std::to_string(adapter.precice.getMaxTimeStepSize()) +
+                      "."));
+
+        adapter.read_data(time.get_delta_t(), external_stress);
 
         // Solve a the system using the Newton-Raphson algorithm
         solve_nonlinear_timestep(solution_delta);
@@ -140,10 +149,7 @@ namespace Nonlinear_Elasticity
         timer.enter_subsection("Advance adapter");
         // ... and pass the coupling data to preCICE, in this case displacement
         // (write data) and stress (read data)
-        adapter.advance(total_displacement,
-                        time.get_delta_t(),
-                        external_stress,
-                        time.get_delta_t());
+        adapter.advance(total_displacement, time.get_delta_t());
 
         timer.leave_subsection("Advance adapter");
 
