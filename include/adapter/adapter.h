@@ -61,9 +61,20 @@ namespace Adapter
      */
     void
     initialize(const DoFHandler<dim> &dof_handler,
-               const VectorType &     deal_to_precice,
-               double                 relative_read_time,
-               VectorType &           precice_to_deal);
+               const VectorType &     deal_to_precice);
+
+    /**
+     * @brief Fetches the read data from preCICE for the next time-step
+     *
+     * @param[in]  relative_read_time Time associated to the coupling data
+     *             received from preCICE and stored in \p precice_to_deal.
+     *             See also precice::Participant::readData
+     * @param[out] precice_to_deal Same data as in @p initialize_precice() i.e.
+     *             data, which is received from preCICE/other participants
+     *             after each time step and exchanged with other participants.
+     */
+    void
+    read_data(double relative_read_time, VectorType &precice_to_deal);
 
     /**
      * @brief      Advances preCICE after every timestep, converts data formats
@@ -72,19 +83,11 @@ namespace Adapter
      * @param[in]  deal_to_precice Same data as in @p initialize_precice() i.e.
      *             data, which should be given to preCICE after each time step
      *             and exchanged with other participants.
-     * @param[in]  relative_read_time Time associated to the coupling data
-     *             received from preCICE and stored in \p precice_to_deal.
-     *             See also precice::Participant::readData
-     * @param[out] precice_to_deal Same data as in @p initialize_precice() i.e.
-     *             data, which is received from preCICE/other participants
-     *             after each time step and exchanged with other participants.
      * @param[in]  computed_timestep_length Length of the timestep used by
      *             the solver.
      */
     void
     advance(const VectorType &deal_to_precice,
-            double            relative_read_time,
-            VectorType &      precice_to_deal,
             const double      computed_timestep_length);
 
     /**
@@ -162,8 +165,8 @@ namespace Adapter
     // Data containers which are passed to preCICE in an appropriate preCICE
     // specific format
     std::vector<int>    interface_nodes_ids;
-    std::vector<double> read_data;
-    std::vector<double> write_data;
+    std::vector<double> read_data_buffer;
+    std::vector<double> write_data_buffer;
 
     // Container to store time dependent data in case of an implicit coupling
     std::vector<VectorType> old_state_data;
@@ -177,7 +180,7 @@ namespace Adapter
      *
      * @param[in] deal_to_precice Global deal.II vector of VectorType. The
      *            result (preCICE specific vector) is stored in the class in
-     *            the variable 'write_data'.
+     *            the variable 'write_data_buffer'.
      *
      * @note  The order, in which preCICE obtains data from the solver, needs
      *        to be consistent with the order of the initially passed vertices
@@ -188,8 +191,8 @@ namespace Adapter
 
     /**
      * @brief format_precice_to_deal Takes the std::vector obtained by preCICE
-     *        in 'read_data' and inserts the values to the right position in
-     *        the global deal.II vector of size n_global_dofs. This is the
+     *        in 'read_data_buffer' and inserts the values to the right position
+     *        in the global deal.II vector of size n_global_dofs. This is the
      *        opposite functionality as @p foramt_precice_to_deal(). This
      *        functions is only used internally in the class and should not
      *        be called in the solver.
@@ -227,9 +230,7 @@ namespace Adapter
   void
   Adapter<dim, VectorType, ParameterClass>::initialize(
     const DoFHandler<dim> &dof_handler,
-    const VectorType &     deal_to_precice,
-    double                 relative_read_time,
-    VectorType &           precice_to_deal)
+    const VectorType &     deal_to_precice)
   {
     AssertThrow(
       dim == precice.getMeshDimensions(mesh_name),
@@ -286,8 +287,8 @@ namespace Adapter
     // exchange. Here, we deal with a vector valued problem for read and write
     // data namely displacement and forces. Therefore, we need dim entries per
     // vertex
-    write_data.resize(dim * n_interface_nodes);
-    read_data.resize(dim * n_interface_nodes);
+    write_data_buffer.resize(dim * n_interface_nodes);
+    read_data_buffer.resize(dim * n_interface_nodes);
     interface_nodes_ids.resize(n_interface_nodes);
 
     // get the coordinates of the interface nodes from deal.ii
@@ -327,24 +328,34 @@ namespace Adapter
     // write initial writeData to preCICE if required
     if (precice.requiresInitialData())
       {
-        // store initial write_data for precice in write_data
+        // store initial write_data for precice in write_data_buffer
         format_deal_to_precice(deal_to_precice);
 
         precice.writeData(mesh_name,
                           write_data_name,
                           interface_nodes_ids,
-                          write_data);
+                          write_data_buffer);
       }
 
     // Initialize preCICE internally
     precice.initialize();
+  }
 
-    // read initial readData from preCICE if required for the first time step
+
+
+  template <int dim, typename VectorType, typename ParameterClass>
+  void
+  Adapter<dim, VectorType, ParameterClass>::read_data(
+    double      relative_read_time,
+    VectorType &precice_to_deal)
+  {
+    // Here, we obtain data from another participant. Again, we insert the
+    // data in our global vector by calling format_precice_to_deal
     precice.readData(mesh_name,
                      read_data_name,
                      interface_nodes_ids,
                      relative_read_time,
-                     read_data);
+                     read_data_buffer);
 
     format_precice_to_deal(precice_to_deal);
   }
@@ -355,34 +366,22 @@ namespace Adapter
   void
   Adapter<dim, VectorType, ParameterClass>::advance(
     const VectorType &deal_to_precice,
-    double            relative_read_time,
-    VectorType &      precice_to_deal,
     const double      computed_timestep_length)
   {
     // This is essentially the same as during initialization
     // We have already all IDs and just need to convert our obtained data to
-    // the preCICE compatible 'write_data' vector, which is done in the
+    // the preCICE compatible 'write_data_buffer' vector, which is done in the
     // format_deal_to_precice function.
     format_deal_to_precice(deal_to_precice);
 
     precice.writeData(mesh_name,
                       write_data_name,
                       interface_nodes_ids,
-                      write_data);
+                      write_data_buffer);
 
     // Here, we need to specify the computed time step length and pass it to
     // preCICE
     precice.advance(computed_timestep_length);
-
-    // Here, we obtain data from another participant. Again, we insert the
-    // data in our global vector by calling format_precice_to_deal
-    precice.readData(mesh_name,
-                     read_data_name,
-                     interface_nodes_ids,
-                     relative_read_time,
-                     read_data);
-
-    format_precice_to_deal(precice_to_deal);
   }
 
 
@@ -405,13 +404,13 @@ namespace Adapter
 
     for (int i = 0; i < n_interface_nodes; ++i)
       {
-        write_data[dim * i]       = deal_to_precice[*x_comp];
-        write_data[(dim * i) + 1] = deal_to_precice[*y_comp];
+        write_data_buffer[dim * i]       = deal_to_precice[*x_comp];
+        write_data_buffer[(dim * i) + 1] = deal_to_precice[*y_comp];
         ++x_comp;
         ++y_comp;
         if (dim == 3)
           {
-            write_data[(dim * i) + 2] = deal_to_precice[*z_comp];
+            write_data_buffer[(dim * i) + 2] = deal_to_precice[*z_comp];
             ++z_comp;
           }
       }
@@ -431,13 +430,13 @@ namespace Adapter
 
     for (int i = 0; i < n_interface_nodes; ++i)
       {
-        precice_to_deal[*x_comp] = read_data[dim * i];
-        precice_to_deal[*y_comp] = read_data[(dim * i) + 1];
+        precice_to_deal[*x_comp] = read_data_buffer[dim * i];
+        precice_to_deal[*y_comp] = read_data_buffer[(dim * i) + 1];
         ++x_comp;
         ++y_comp;
         if (dim == 3)
           {
-            precice_to_deal[*z_comp] = read_data[(dim * i) + 2];
+            precice_to_deal[*z_comp] = read_data_buffer[(dim * i) + 2];
             ++z_comp;
           }
       }

@@ -63,8 +63,10 @@ namespace Adapter
     void
     set_absolute_time(const double new_time)
     {
-      timestep     = new_time / delta_t;
-      time_current = new_time;
+      // to account for rounding errors
+      double factor = std::pow(10, 10);
+      timestep      = std::round((new_time / delta_t) * factor) / factor;
+      time_current  = new_time;
     }
 
     void

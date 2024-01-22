@@ -645,7 +645,7 @@ namespace Linear_Elasticity
     // information to preCICE
     // We aways read data at the end of a time-step, as we blend the beginning
     // and the end via the theta scheme
-    adapter.initialize(dof_handler, displacement, time.get_delta_t(), stress);
+    adapter.initialize(dof_handler, displacement);
 
     // Then, we start the time loop. The loop itself is steered by preCICE. This
     // line replaces the usual 'while( time < end_time)'
@@ -662,6 +662,18 @@ namespace Linear_Elasticity
         std::cout << std::endl
                   << "Timestep " << time.get_timestep() << " @ " << std::fixed
                   << time.current() << "s" << std::endl;
+
+        AssertThrow(std::abs(time.get_delta_t() -
+                             adapter.precice.getMaxTimeStepSize()) < 1e-10,
+                    ExcMessage(
+                      "This solver supports only constant time-step sizes."
+                      "Configured time step size in deal.II parameter file: " +
+                      std::to_string(time.get_delta_t()) +
+                      ". Time-window size from preCICE: " +
+                      std::to_string(adapter.precice.getMaxTimeStepSize()) +
+                      "."));
+
+        adapter.read_data(time.get_delta_t(), stress);
 
         // Assemble the time dependent contribution obtained from the Fluid
         // participant
@@ -682,10 +694,7 @@ namespace Linear_Elasticity
         // participant to finish their time step. Therefore, we measure the
         // timings around this functionality
         timer.enter_subsection("Advance adapter");
-        adapter.advance(displacement,
-                        time.get_delta_t(),
-                        stress,
-                        time.get_delta_t());
+        adapter.advance(displacement, time.get_delta_t());
         timer.leave_subsection("Advance adapter");
 
         // Next, we reload the data we have previosuly stored in the beginning
