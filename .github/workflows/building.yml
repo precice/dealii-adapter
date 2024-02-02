@@ -16,14 +16,14 @@ jobs:
     - name: setup
       run: |
          command="sudo apt-get -y update && \
-                  wget https://github.com/precice/precice/releases/download/v2.1.1/libprecice2_2.1.1_focal.deb && \
-                  sudo apt-get -y install ./libprecice2_2.1.1_focal.deb && \
+                  wget https://github.com/precice/precice/releases/download/v3.0.0/libprecice3_3.0.0_jammy.deb && \
+                  sudo apt-get -y install ./libprecice3_3.0.0_jammy.deb && \
                   cd /src && \
                   cmake . && \
                   make";
          
          echo $command
          
-         docker pull dealii/dealii:v9.2.0-focal
+         docker pull dealii/dealii:v9.5.0-jammy
          # need to set uid to allow container user to write to the mount
-         docker run -t --user 0 -v $PWD:/src dealii/dealii:v9.2.0-focal /bin/sh -c "$command";
+         docker run -t --user 0 -v $PWD:/src dealii/dealii:v9.5.0-jammy /bin/sh -c "$command";
