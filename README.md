@@ -1,6 +1,6 @@
 # deal.II-preCICE adapter
 
-![Building](https://github.com/precice/dealii-adapter/workflows/Building/badge.svg)
+[![Building](https://github.com/precice/dealii-adapter/actions/workflows/building.yml/badge.svg)](https://github.com/precice/dealii-adapter/actions/workflows/building.yml)
 
 Coupled structural solvers written with the C++ finite element library deal.II:
 
