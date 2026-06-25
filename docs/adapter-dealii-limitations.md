@@ -1,6 +1,7 @@
 ---
 title: Limitations and assumptions
 permalink: adapter-dealii-limitations.html
+url: /adapter-dealii-limitations.html
 keywords: adapter, deal.II, limitations, 
 ---
 

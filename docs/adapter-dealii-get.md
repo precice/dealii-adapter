@@ -1,6 +1,7 @@
 ---
 title: Get the deal.II adapter
 permalink: adapter-dealii-get.html
+url: /adapter-dealii-get.html
 keywords: adapter, dealii, building
 summary: "Use CMake to install deal.II and build the individual programs."
 ---
