@@ -1,7 +1,8 @@
 ---
 title: Use the adapter for your own project
 permalink: adapter-dealii-own-project.html
-url: /adapter-dealii-own-project.html
+aliases:
+  - /adapter-dealii-own-project.html
 keywords: adapter, dealii, adapter writing
 summary: "This section will help you couple your own deal.II-code based on the provided deal.II solid codes."
 ---

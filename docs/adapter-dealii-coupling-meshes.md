@@ -1,7 +1,8 @@
 ---
 title: Coupling meshes in deal.II
 permalink: adapter-dealii-coupling-meshes.html
-url: /adapter-dealii-coupling-meshes.html
+aliases:
+  - /adapter-dealii-coupling-meshes.html
 keywords: adapter, dealii, meshes
 summary: "The polynomial support points are used to define the coupling mesh."
 ---

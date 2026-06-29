@@ -1,8 +1,8 @@
 ---
 title: The deal.II adapter
 permalink: adapter-dealii-overview.html
-url: /adapter-dealii-overview.html
 aliases:
+  - /adapter-dealii-overview.html
   - /adapter-dealii.html
 redirect_from: adapter-dealii.html
 keywords: adapter, deal.II
