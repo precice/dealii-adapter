@@ -1,6 +1,8 @@
 ---
 title: Theoretic details of coupled deal.II codes
 permalink: adapter-dealii-solver-details.html
+aliases:
+  - /adapter-dealii-solver-details.html
 keywords: adapter, dealii, time discretization
 ---
 
